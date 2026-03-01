@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <Deterministic>true</Deterministic>
+    <AssemblyName>ZL.Gear.Abstractions</AssemblyName>
+    <RootNamespace>ZL.Gear.Abstractions</RootNamespace>
+    <Description>Gear.NET 抽象层 - 扩展方法与设备类型定义</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
+  </ItemGroup>
+</Project>

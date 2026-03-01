@@ -1,0 +1,571 @@
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using ZL.Gear.Core.Devices.Abstractions;
+using ZL.Gear.Core.Events;
+using ZL.Gear.Core.Models;
+using ZL.Gear.Core.Runner;
+using ZL.Gear.Core.Services;
+using ZL.Gear.Core.StepHandler;
+using ZL.Gear.Core.Workflow;
+using ZL.Gear.Engine.Evaluation;
+
+namespace ZL.Gear.Engine.Runner
+{
+    /// <summary>
+    /// 纯粹的执行引擎，不负责创建依赖项
+    /// </summary>
+    public class SequenceExecutor : IDisposable
+    {
+        private readonly IDeviceService _deviceService;
+        private readonly ILogger _logger;
+        private readonly IGearProfileService _profileService;
+        private CancellationTokenSource _cancellationTokenSource;
+        private bool _disposed;
+        private readonly Stopwatch _totalSw = new();
+        private IDictionary<string, object> deviceRoles = new Dictionary<string, object>();
+        
+        /// <summary>
+        /// 测试步骤间隔
+        /// </summary>
+        private readonly int TestStepInterval = 500;
+        private IProgress<StepRunResult> _progressReporter;
+
+        private void _log(string msg) => _logger?.LogInformation(msg);
+
+        /// <summary>
+        /// 构造函数，通过依赖注入接收其所有依赖项。
+        /// </summary>
+        public SequenceExecutor(
+            IDeviceService deviceService, 
+            IGearProfileService profileService,
+            ILogger<SequenceExecutor> logger, 
+            int testStepInterval = 500)
+        {
+            _deviceService = deviceService ?? throw new ArgumentNullException(nameof(deviceService));
+            _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
+            _logger = logger;
+            TestStepInterval = testStepInterval;
+            deviceRoles = _profileService.LoadDeviceRoles();
+        }
+
+        private void Log(string message)
+        {
+            _logger?.LogInformation(message);
+        }
+
+        // 创建一个私有的、并行的计时器循环方法
+        private async Task RunTimerLoopAsync(CancellationToken token)
+        {
+            // 每秒更新一次
+            const int updateIntervalMs = 1000;
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    // 触发事件，将当前总耗时广播出去
+                    // GlobalEvents.OnTestTotalTimeChanged?.Invoke(_totalSw.Elapsed);
+                    // 等待一秒或直到被取消
+                    await Task.Delay(updateIntervalMs, token);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+        public async Task<TestRunResult> ExecuteAsync(List<StepConfig> steps, string model, string barcode,
+            Dictionary<string, object> globalContext, CancellationToken token, IProgress<StepRunResult> progress = null)
+        {
+            _progressReporter = progress;
+            if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
+            await Task.Delay(500, token);
+            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            var testWasStoppedByFail = false;
+            var sharedData = new ContextVariableStore();
+
+            var runResult = new TestRunResult { Model = model, Barcode = barcode, StartTime = DateTime.Now };
+            var activeLeases = new List<IDisposable>();
+            _log("==================================================");
+            _log($"测试开始: 型号={model}, 条码={barcode}");
+            _log("==================================================");
+
+            TestEvents.StatusChanged?.Invoke("Running");
+            _totalSw.Restart();
+            // 启动后台计时器任务，但「不要 await」它，让它在后台运行
+            var timerTask = RunTimerLoopAsync(cancellationToken);
+            Dictionary<string, IDevice> activeDevices = new();
+            try
+            {
+                try
+                {
+                    // === 1. 资源管理阶段 ===
+                    activeDevices = await LeaseRequiredDevicesAsync(steps, activeLeases, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    runResult.OverallSuccess = false;
+                    runResult.Summary = $"未找到该步骤对应的设备，或设备未启用: {ex.Message}";
+                    _log($"[严重错误] {runResult.Summary}");
+                    TestEvents.StatusChanged?.Invoke("Error");
+                    // GlobalEvents.OnUiMainTipChanged?.Invoke("未找到该步骤对应的设备，或设备未启用！", false);
+                }
+                if (activeDevices.Count == 0)
+                {
+                    runResult.OverallSuccess = false;
+                    runResult.Summary = $"未找到该步骤对应的设备，或设备未启用！";
+                    _log($"[严重错误] {runResult.Summary}");
+                    TestEvents.StatusChanged?.Invoke("Error");
+                    // GlobalEvents.OnUiMainTipChanged?.Invoke("未找到该步骤对应的设备，或设备未启用！", false);
+                }
+                else
+                {
+                    // ====================================================================
+                    //  在执行任何步骤前，预扫描并创建所有主从信令对象
+                    // ============================================================================
+
+                    // 找出所有步骤（包括所有子步骤）
+                    var allSteps = steps.SelectMany(s => StepKit.FlattenSteps(s)).ToList();
+                    //如果DependsOn不为空，则为主步骤，需要再加防护（明确的标识出 IsMaster
+                    var masterStepKeys = new HashSet<string>(allSteps.Where(step => !string.IsNullOrEmpty(step.DependsOn)).Select(step => step.DependsOn));
+                    // 为每一个被识别出的主步骤，预先创建并注册信令对象
+                    foreach (var masterKey in masterStepKeys)
+                    {
+                        _log($"[预分析] 发现主步骤 '{masterKey}'，为其创建信令对象。");
+                        sharedData.RegisterSignalPairFor(masterKey);
+                    }
+                    // 初始化结果树
+                    // 为每一个顶层步骤配置创建一个对应的 StepRunResult 实例
+                    runResult.StepResults = steps.Where(s => s.Enable).Select(cfg => new StepRunResult(cfg)).ToList();
+
+                    // 执行阶段：启动递归执行
+                    // 之前的 for 循环被这个循环替代，我们遍历顶层的 StepRunResult
+                    foreach (var topLevelStepResult in runResult.StepResults)
+                    {
+                        if (cancellationToken.IsCancellationRequested) break;
+
+                        string stepKey = topLevelStepResult.StepKey;
+                        // 在 stepConfigs 中找到与 topLevelStepResult 对应的 StepConfig
+                        var stepConfig = steps.First(cfg => cfg.StepKey == stepKey);
+
+                        if (!stepConfig.Enable)
+                        {
+                            topLevelStepResult.Status = StepExecutionStatus.Completed;
+                            topLevelStepResult.Outcome = StepOutcome.Skipped;
+                            continue;
+                        }
+                        var context = new StepContext(stepKey, stepConfig, new ReadOnlyDictionary<string, IDevice>(activeDevices), WorkflowGlobal.Services, cancellationToken,
+                            RunTestMode.Auto, sharedData, globalContext, null, _log);
+
+                        // 注入点：调用 BindProfile 将 Profile 中的映射应用到 Step 配置中
+                        // deviceRoles 通常是从 SeatProfile.json 加载的 IDictionary<string, object>
+                        // 为了匹配 BindProfile 的签名 IDictionary<string, string>，我们做一下转换
+                        var profileStrDict = deviceRoles.ToDictionary(k => k.Key, v => v.Value?.ToString());
+                        
+                        // 递归应用 BindProfile 到步骤树
+                        ApplyProfileToStepTree(stepConfig, profileStrDict);
+                        await ExecuteStepRecursiveAsync(stepConfig, topLevelStepResult, context);
+
+                        // c检查是否需要提前终止
+                        if (topLevelStepResult.Outcome != StepOutcome.Passed && topLevelStepResult.Outcome != StepOutcome.Skipped && stepConfig.StopByFail)
+                        {
+                            _log($"[警告] 因步骤 '{stepConfig.StepName}' 未通过且设置了 StopByFail，测试提前终止。");
+                            testWasStoppedByFail = true;
+                            break;
+                        }
+                        await Task.Delay(TestStepInterval, cancellationToken);
+                    }
+                    runResult.EndTime = DateTime.Now;
+                    // 5. 最终判定
+                    // 如果所有顶层步骤都通过或被跳过，则总体成功
+                    //runResult.OverallSuccess = runResult.StepResults.All(r => r.Outcome == StepOutcome.Passed || r.Outcome == StepOutcome.Skipped);
+                    runResult.OverallSuccess = runResult.StepResults.All(r => r.IsBranchSuccessful);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                runResult.OverallSuccess = false;
+                runResult.Summary = "测试因超时或用户取消而在准备阶段终止。";
+                _log($"[警告] {runResult.Summary}");
+            }
+            catch (Exception ex)
+            {
+                runResult.OverallSuccess = false;
+                runResult.Summary = $"测试序列因严重错误而中断: {ex.Message}";
+                _log($"[严重错误] {runResult.Summary}");
+                TestEvents.StatusChanged?.Invoke("Error");
+            }
+            finally
+            {
+                _cancellationTokenSource.Cancel();
+                sharedData?.Dispose();
+                _log("正在归还所有已租用的设备...");
+                activeLeases.ForEach(l => l.Dispose());
+                _log("设备已归还。");
+
+                try { await timerTask; } catch { }
+            }
+            // 5. 结果处理阶段 (在所有执行和清理之后)
+            // ★ 修正点：使用 _totalSw 的时间，并设置 EndTime
+            _totalSw.Stop();
+            // 记录确切的结束时间戳
+            runResult.EndTime = DateTime.Now;
+            if (testWasStoppedByFail)
+            {
+                runResult.OverallSuccess = false;
+            }
+            else
+            {
+                //如果租赁设备的时候就异常了，或者 所有的步骤都没有返回测试结果 直接返回错误
+                runResult.OverallSuccess = activeDevices.Count == 0 ? false : (runResult.StepResults?.Count == 0 ? false : runResult.StepResults.All(r => r.IsBranchSuccessful));
+            }
+            runResult.Summary = BuildSummary(runResult);
+            HandleFinalResultsAsync(runResult, steps, model, barcode);
+            _log("==================================================");
+            _log("测试总结");
+            _log(runResult.Summary);
+            _log("==================================================");
+            // 数据一致性验证
+            try
+            {
+                foreach (var stepResult in runResult.StepResults)
+                {
+                    stepResult.ValidateDataConsistency();
+                }
+                _log("[验证] 数据一致性检查通过");
+            }
+            catch (Exception ex)
+            {
+                _log($"[警告] 数据一致性检查失败: {ex.Message}");
+            }
+
+            return runResult;
+        }
+
+        /// <summary>
+        /// [全新增] 递归执行器，是新架构的核心。
+        /// </summary>
+        /// <param name="stepConfig">当前要执行的步骤的配置。</param>
+        /// <param name="stepResult">与stepConfig对应的、用于存储运行时结果的对象。</param>
+        /// <param name="context">执行上下文。</param>
+        private async Task ExecuteStepRecursiveAsync(StepConfig stepConfig, StepRunResult stepResult, StepContext context)
+        {
+            var sw = Stopwatch.StartNew();
+            stepResult.StartTime = DateTime.Now;
+            stepResult.Status = StepExecutionStatus.Running;
+            //本项目中仅限于用于PLC在SBR测试中加压负载完成通知 测试步骤测试电流   ？？？？？  不要有并行的主步骤，否则会错乱
+            RunnerEvents.StepStarted?.Invoke(context);
+            RunnerEvents.OnStepProgress?.Invoke(stepResult);
+            _log($"[执行] {stepConfig.StepName}...");
+            _log($"[诊断] 步骤 {stepConfig.StepKey} 有 {stepConfig.SubSteps?.Count ?? 0} 个子步骤");
+            // --- UI 更新点 (阶段四) ---
+            // progress?.Report(stepResult);
+            // TestEvents.StepStarted?.Invoke(stepConfig.StepName); // 旧事件可保留或替换
+
+            try
+            {
+                // 1. 如果有子步骤，先执行子步骤
+                if (stepConfig.SubSteps != null && stepConfig.SubSteps.Any())
+                {
+                    await ExecuteSubStepsAsync(stepConfig, stepResult, context);
+
+                    // 关键修复：如果任何子步骤未通过，则立即将当前步骤标记为失败
+                    var failedSubSteps = stepResult.SubStepResults
+                        .Where(sub => sub.Outcome != StepOutcome.Passed && sub.Outcome != StepOutcome.Skipped)
+                        .ToList();
+
+                    if (failedSubSteps.Any())
+                    {
+                        stepResult.Outcome = StepOutcome.Failed;
+                        stepResult.Message = $"以下子步骤未通过: {string.Join(", ", failedSubSteps.Select(f => f.StepName))}";
+                        _log($"[子步骤失败] {stepConfig.StepName} 因子步骤失败而终止");
+                        return; // 不再执行当前步骤的命令
+                    }
+
+                    _log($"[诊断] 步骤 {stepConfig.StepName} 的所有子步骤执行完成");
+                }
+                if (stepConfig.StepType.ToUpper() != "GROUP")
+                {
+                    // 2. 执行本步骤自身的原子命令（仅当所有子步骤都通过时）
+                    StepConfigNormalizer.Normalize(stepConfig, deviceRoles);
+                    var dispatcher = context.GetService<StepDispatcher>();
+                    var measurementResult = await dispatcher.DispatchSingleAsync(stepConfig, context);
+
+                    // 关键修复：明确将测量数据存储到当前步骤的 StepMeasurements 集合
+                    int ValueCount = 0;
+                    if (measurementResult.Value != null)
+                    {
+                        ValueCount = measurementResult.Value.Count;
+                        foreach (var measurement in measurementResult.Value)
+                        {
+                            stepResult.StepMeasurements.Add(measurement);
+                        }
+                    }
+                    //为了兼容老的代码，诸如 条码比对action已经检测过了，在此就不做结果评价了
+                    var Command = stepConfig.Command;
+                    var _Command = Command.ToUpper();
+                    if (_Command == "BARCODECHECK" || _Command == "ECUPOWER" || _Command == "PLCDELAY" || _Command == "AUTOSBRSENSORCHECK")
+                    {
+                        stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
+                        stepResult.Message = measurementResult.Message;
+                    }
+                    else
+                    {
+                        stepResult.Message = measurementResult.Message;
+                        _log($"[诊断] 步骤 {stepConfig.StepName} 产生 {ValueCount} 条测量数据");
+
+                        // 3. 评估结果（使用重构后的评估器）
+                        // 关键修复：先设置 Status 为 Completed，避免评估器检查失败
+                        stepResult.Status = StepExecutionStatus.Completed;
+                        var evaluationResult = ResultEvaluator.Evaluate(stepResult, stepConfig);
+                        _log($"[诊断] 评估详情: ExecutionType={stepConfig.ExecutionType}, ExpectedResults.Count={stepConfig.ExpectedResults?.Count ?? 0}");
+                        _log($"[诊断] stepResult.Status={stepResult.Status}, stepResult.Outcome={stepResult.Outcome}");
+                        _log($"[诊断] 评估结果: Success={evaluationResult.Success}, Message={evaluationResult.Message}");
+                        _log($"[诊断] 即将设置 stepResult.Outcome");
+                        stepResult.Outcome = evaluationResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
+                        _log($"[诊断] 已设置 stepResult.Outcome={stepResult.Outcome}");
+
+                        _log($"[评估] 步骤 {stepConfig.StepName} 评估结果: {evaluationResult.Success}, 消息: {evaluationResult.Message}");
+                        // 使用评估器的详细消息
+                        if (!string.IsNullOrEmpty(evaluationResult.Message))
+                        {
+                            stepResult.Message = evaluationResult.Message;
+                        }
+
+                        _log($"[评估] 步骤 {stepConfig.StepName} 评估结果: {evaluationResult.Success}, 消息: {evaluationResult.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                stepResult.Outcome = StepOutcome.Error;
+                stepResult.Message = "步骤超时或被取消。";
+                _log($"[取消] 步骤 {stepConfig.StepName} 被取消");
+            }
+            catch (Exception ex)
+            {
+                stepResult.Outcome = StepOutcome.Error;
+                stepResult.Message = $"步骤执行时发生内部错误: {ex.Message}";
+                _log($"[异常] 步骤 {stepConfig.StepName} 执行失败: {ex}");
+            }
+            finally
+            {
+                sw.Stop();
+                stepResult.DurationSeconds = (sw.Elapsed.TotalSeconds).ToString("F2");
+                stepResult.EndTime = DateTime.Now;
+                stepResult.Status = StepExecutionStatus.Completed;
+
+                var outcomeDisplay = stepResult.Outcome == StepOutcome.Passed ? "PASS" : stepResult.Outcome.ToString().ToUpper();
+                _logger?.LogInformation($"[{outcomeDisplay}] {stepConfig.StepName} 耗时={stepResult.DurationSeconds:F2}s, 消息: {stepResult.Message}");
+                _progressReporter?.Report(stepResult);
+                RunnerEvents.OnStepProgress?.Invoke(stepResult);
+            }
+        }
+        /// <summary>
+        ///  辅助方法，用于执行子步骤
+        /// </summary>
+        private async Task ExecuteSubStepsAsync(StepConfig parentConfig, StepRunResult parentResult, StepContext parentContext)
+        {
+            _log($"[子步骤] 开始执行 {parentConfig.StepName} 的 {parentConfig.SubSteps.Count} 个子步骤，模式: {parentConfig.ExecutionMode}");
+
+            // 修复：预先建立配置映射，避免并行环境中的查找
+            var stepMapping = parentConfig.SubSteps.ToDictionary(c => c.StepKey);
+            //主步骤里面的 ExecutionMode 才有效，如果为叶子节点，则无效
+            if (parentConfig.ExecutionMode == StepExecutionMode.Parallel)
+            {
+                try
+                {
+                    var subTasks = parentResult.SubStepResults.Select(async subResult =>
+                    {
+                        if (parentContext.CancellationToken.IsCancellationRequested) { _log($"[取消] 子步骤 {subResult.StepName} 因取消而跳过"); return; }
+
+                        if (stepMapping.TryGetValue(subResult.StepKey, out var subConfig))
+                        {
+                            var subContext = parentContext.CreateChildContext((StepConfig)subConfig.Clone());
+                            // 在并行模式下，如果依赖性为空，且有延迟时间定义才进行延迟；否则，交由 DependsOn对应的主步骤进行 事件通知
+                            if (string.IsNullOrEmpty(subConfig.DependsOn) && subConfig.StartDelayMs > 0)
+                            {
+                                _log($"[延迟] 子步骤 {subConfig.StepName} 延迟 {subConfig.StartDelayMs}ms 执行");
+                                await Task.Delay(subConfig.StartDelayMs, subContext.CancellationToken);
+                            }
+
+                            await ExecuteStepRecursiveAsync(subConfig, subResult, subContext);
+                        }
+                        else
+                        {
+                            _log($"[错误] 未找到子步骤 {subResult.StepKey} 的配置");
+                            subResult.Outcome = StepOutcome.Error;
+                            subResult.Message = "配置缺失";
+                        }
+                    });
+
+                    await Task.WhenAll(subTasks);
+                }
+                finally
+                {
+                }
+                _log($"[子步骤] {parentConfig.StepName} 的所有并行子步骤执行完成");
+            }
+            else
+            {
+                foreach (var subResult in parentResult.SubStepResults)
+                {
+                    if (parentContext.CancellationToken.IsCancellationRequested) { _log($"[取消] 串行子步骤执行因取消而终止"); break; }
+
+                    if (stepMapping.TryGetValue(subResult.StepKey, out var subConfig))
+                    {
+                        var subContext = parentContext.CreateChildContext((StepConfig)subConfig.Clone());
+                        // 使用新的 subContext 进行调用
+                        await ExecuteStepRecursiveAsync(subConfig, subResult, subContext);
+
+                        // 如果子步骤失败且设置了StopByFail，则不再继续执行后续的兄弟步骤
+                        if (subResult.Outcome != StepOutcome.Passed && subConfig.StopByFail)
+                        {
+                            _log($"[停止] 因步骤 '{subConfig.StepName}' 失败且设置了 StopByFail，停止执行后续兄弟步骤");
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        _log($"[错误] 未找到子步骤 {subResult.StepKey} 的配置");
+                        subResult.Outcome = StepOutcome.Error;
+                        subResult.Message = "配置缺失";
+
+                        if (subConfig?.StopByFail == true)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                _log($"[子步骤] {parentConfig.StepName} 的所有串行子步骤执行完成");
+            }
+        }
+
+        private async Task<Dictionary<string, IDevice>> LeaseRequiredDevicesAsync(List<StepConfig> steps, List<IDisposable> leases, CancellationToken token)
+        {
+            var requiredDeviceKeys = CollectRequiredDevices(steps);
+            var activeDevices = new Dictionary<string, IDevice>();
+            _log($"准备租用 {requiredDeviceKeys.Count} 个设备: {string.Join(", ", requiredDeviceKeys)}");
+            foreach (var key in requiredDeviceKeys)
+            {
+                var lease = await _deviceService.LeaseAsync<IDevice>(key, token);
+                leases.Add(lease);
+                activeDevices.Add(key, lease.Device);
+            }
+            _log("所有设备租用成功。");
+            return activeDevices;
+        }
+
+        private void HandleFinalResultsAsync(TestRunResult runResult, List<StepConfig> _originalConfigs, string model, string barcode)
+        {
+            // 如果条码为空，则认定为手动单项测试
+            if (!string.IsNullOrEmpty(barcode))
+            {
+                RunnerEvents.OnTestRunCompleted?.Invoke(runResult);
+                //TestEvents.StatusChanged?.Invoke(runResult.OverallSuccess ? "Completed" : "Failed");
+            }
+        }
+
+        private string BuildSummary(TestRunResult runResult)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine(runResult.OverallSuccess ? "测试通过 (PASS)" : "测试失败 (FAIL)");
+            sb.AppendLine($"总耗时: {runResult.TotalDurationSeconds:F2} 秒.");
+            sb.AppendLine("详细步骤摘要:");
+
+            // 递归构建摘要
+            Action<StepRunResult, string> buildStepSummary = null;
+            buildStepSummary = (stepResult, indent) =>
+            {
+                sb.AppendLine($"{indent}- {stepResult.StepName}: {stepResult.Outcome} ({stepResult.DurationSeconds:F2}s) - {stepResult.Message}");
+                foreach (var subResult in stepResult.SubStepResults)
+                {
+                    buildStepSummary(subResult, indent + "  ");
+                }
+            };
+
+            foreach (var topLevelResult in runResult.StepResults)
+            {
+                buildStepSummary(topLevelResult, "  ");
+            }
+
+            return sb.ToString();
+        }
+        // 辅助方法：扫描整个序列，找出所有需要用到的设备 (保持不变)
+        private HashSet<string> CollectRequiredDevices(List<StepConfig> sequence)
+        {
+            var keys = new HashSet<string>();
+            Action<StepConfig> collect = null;
+            collect = (step) =>
+            {
+                if (!step.Enable) return;
+                if (!string.IsNullOrEmpty(step.Target)) keys.Add(step.Target);
+                // 添加所有额外目标设备
+                if (step.AdditionalTargets != null)
+                {
+                    foreach (var additionalTarget in step.AdditionalTargets)
+                    {
+                        if (!string.IsNullOrEmpty(additionalTarget))
+                        {
+                             // 资源检查的逻辑也应该统一：如果是逻辑名，映射为物理名；如果是物理名，直接用。
+                             // 注意：这里只是收集字符串，用于后续 LeaseAsync。
+                             if (deviceRoles.ContainsKey(additionalTarget))
+                                 keys.Add(deviceRoles[additionalTarget].ToString());
+                             else
+                                 keys.Add(additionalTarget); // 兼容直接物理名模式
+                        }
+                    }
+                }
+                // 递归处理子步骤
+                if (step.SubSteps != null)
+                {
+                    foreach (var sub in step.SubSteps) collect(sub);
+                }
+            };
+            // 从顶层步骤开始收集
+            foreach (var topLevelStep in sequence) collect(topLevelStep);
+            return keys;
+        }
+        // 辅助方法：递归应用 Profile
+        // 建议将其放到 StepConfigKit 中，但为了快速生效，暂置于此
+        private void ApplyProfileToStepTree(StepConfig step, IDictionary<string, string> profile)
+        {
+            if (step == null) return;
+            step.BindProfile(profile);
+            
+            if (step.SubSteps != null)
+            {
+                foreach (var sub in step.SubSteps)
+                {
+                    ApplyProfileToStepTree(sub, profile);
+                }
+            }
+        }
+
+        public void Stop()
+        {
+            if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+            {
+                _cancellationTokenSource.Cancel();
+                TestEvents.StatusChanged?.Invoke("Stopped");
+                _log("收到停止请求，测试流程取消");
+            }
+        }
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+            _cancellationTokenSource?.Dispose();
+        }
+    }
+}
