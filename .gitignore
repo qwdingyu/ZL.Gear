@@ -64,3 +64,4 @@ _ReSharper*/
 .vscode/
 
 docs/Templates/
+PublishOutput/

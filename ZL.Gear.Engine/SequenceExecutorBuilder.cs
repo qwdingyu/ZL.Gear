@@ -202,8 +202,10 @@ namespace ZL.Gear.Engine
             // 注册工作流评估器
             services.AddSingleton<IWorkflowEvaluator, SimpleWorkflowEvaluator>();
 
-            // 注册动作注册表
-            services.AddSingleton<IActionRegistry, SimpleActionRegistry>();
+            // 注册动作注册表和解析器
+            services.AddSingleton<SimpleActionRegistry>();
+            services.AddSingleton<IActionRegistry>(sp => sp.GetRequiredService<SimpleActionRegistry>());
+            services.AddSingleton<IActionResolver>(sp => sp.GetRequiredService<SimpleActionRegistry>());
 
             // 注册 StepDispatcher
             services.AddSingleton(sp =>
@@ -259,6 +261,16 @@ namespace ZL.Gear.Engine
         {
             if (_disposed) return;
             _disposed = true;
+
+            if (_shouldDisposeDeviceService && _deviceService is IDisposable disposableDevice)
+            {
+                try { disposableDevice.Dispose(); } catch { }
+            }
+
+            if (_shouldDisposeProfileService && _profileService is IDisposable disposableProfile)
+            {
+                try { disposableProfile.Dispose(); } catch { }
+            }
 
             // 释放资源持有者
             foreach (var resource in _resourceHolder)
@@ -366,7 +378,7 @@ namespace ZL.Gear.Engine
     /// <summary>
     /// 简单的动作注册表实现
     /// </summary>
-    public class SimpleActionRegistry : IActionRegistry
+    public class SimpleActionRegistry : IActionRegistry, IActionResolver
     {
         private readonly Dictionary<string, ActionDelegate> _actions = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, MeasurementActionDelegate> _measurements = new(StringComparer.OrdinalIgnoreCase);
@@ -383,6 +395,18 @@ namespace ZL.Gear.Engine
         public void RegisterMeasurement(string name, MeasurementActionDelegate action, RegistrationPolicy policy = RegistrationPolicy.ThrowIfExists)
         {
             _measurements[name] = action;
+        }
+
+        public ActionDelegate ResolveAction(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            return _actions.TryGetValue(name, out var action) ? action : null;
+        }
+
+        public MeasurementActionDelegate ResolveMeasurement(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            return _measurements.TryGetValue(name, out var measurement) ? measurement : null;
         }
     }
 }

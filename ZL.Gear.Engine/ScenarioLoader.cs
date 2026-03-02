@@ -38,12 +38,6 @@ namespace ZL.Gear.Engine
         {
             var jObject = JObject.Parse(json);
 
-            // 如果是 DynamicFlow 格式（包含 Sequence），转换为 StepConfig
-            if (jObject["Parameters"]?["Sequence"] != null)
-            {
-                return ParseDynamicFlow(jObject);
-            }
-
             // 标准 StepConfig 数组格式
             var steps = new List<StepConfig>();
             var stepsArray = jObject["Steps"] as JArray;
@@ -68,49 +62,6 @@ namespace ZL.Gear.Engine
                 }
             }
 
-            return steps;
-        }
-
-        /// <summary>
-        /// 解析 DynamicFlow 格式的 JSON
-        /// </summary>
-        private static List<StepConfig> ParseDynamicFlow(JObject jObject)
-        {
-            var steps = new List<StepConfig>();
-
-            var stepConfig = new StepConfig
-            {
-                StepKey = jObject["StepKey"]?.ToString() ?? "DynamicFlow",
-                StepName = jObject["StepName"]?.ToString() ?? "Dynamic Flow Test",
-                Command = "DynamicFlow",
-                Target = jObject["Target"]?.ToString(),
-                Parameters = new Dictionary<string, object>()
-            };
-
-            var parameters = jObject["Parameters"] as JObject;
-            if (parameters != null)
-            {
-                // 提取 Variables
-                var variables = parameters["Variables"] as JObject;
-                if (variables != null)
-                {
-                    foreach (var prop in variables.Properties())
-                    {
-                        stepConfig.Parameters[prop.Name] = prop.Value?.ToString();
-                    }
-                }
-
-                // 将完整的 Parameters 保存
-                foreach (var prop in parameters.Properties())
-                {
-                    if (prop.Name != "Variables" && prop.Name != "Sequence" && prop.Name != "Finally")
-                    {
-                        stepConfig.Parameters[prop.Name] = prop.Value?.ToString();
-                    }
-                }
-            }
-
-            steps.Add(stepConfig);
             return steps;
         }
 

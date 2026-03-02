@@ -18,6 +18,9 @@ namespace ZL.Gear.Engine.Evaluation
         /// </summary>
         public static EvaluationResult Evaluate(StepRunResult stepResult, StepConfig config)
         {
+            if (stepResult == null) throw new ArgumentNullException(nameof(stepResult));
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
             // 1. 第一道防线：执行层面的系统异常 (Crash, Timeout, Cancellation)
             if (stepResult.Status != StepExecutionStatus.Completed || stepResult.Outcome == StepOutcome.Error)
             {
@@ -28,17 +31,13 @@ namespace ZL.Gear.Engine.Evaluation
             // 如果 config 中没有定义 Category，建议默认视为 Execute 或 Verify (视你的业务偏好而定)
             var category = config.ExecutionType;
 
-            Console.WriteLine($"[ResultEvaluator] ExecutionType={category}, ExpectedResults={(config.ExpectedResults?.Count ?? 0)}");
-
             switch (category)
             {
                 case StepExecutionType.Execute:
-                    Console.WriteLine("[ResultEvaluator] 进入 Execute 分支");
                     // 纯动作模式：只要没抛异常（上面已拦截），就视为成功。忽略所有 Spec。
                     return EvaluationResult.Pass("动作执行成功");
 
                 case StepExecutionType.DataCollection:
-                    Console.WriteLine("[ResultEvaluator] 进入 DataCollection 分支");
                     // 采集模式：必须有数据
                     if (stepResult.AllMeasurements.Count == 0)
                         return EvaluationResult.Fail("采集失败：未获取到任何测量数据");
@@ -51,7 +50,6 @@ namespace ZL.Gear.Engine.Evaluation
 
                 case StepExecutionType.Verify:
                 default:
-                    Console.WriteLine("[ResultEvaluator] 进入 Verify/default 分支");
                     // 校验模式：必须配置规格
                     if (config.ExpectedResults == null || !config.ExpectedResults.Any())
                         return EvaluationResult.Fail("配置错误：校验类步骤(Verify)必须包含期望结果(ExpectedResults)");
@@ -176,7 +174,7 @@ namespace ZL.Gear.Engine.Evaluation
 
         private static (bool, string, object) CheckNumeric(ExpectedSpec spec, object rawValue, string mode)
         {
-            if (!double.TryParse(rawValue?.ToString(), out double val))
+            if (!double.TryParse(rawValue?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
                 return (false, $"[FAIL] {spec.Key}: '{rawValue}' 非数字", rawValue);
 
             // 应用补偿 (Offset)
@@ -240,7 +238,7 @@ namespace ZL.Gear.Engine.Evaluation
         private static (bool, string, object) CheckBitwise(ExpectedSpec spec, object rawValue, string mode)
         {
             // 转为 long 以支持 32位/64位 整数
-            if (!long.TryParse(rawValue?.ToString(), out long intVal))
+            if (!long.TryParse(rawValue?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out long intVal))
                 return (false, $"[FAIL] {spec.Key}: '{rawValue}' 非整数，无法进行位操作", rawValue);
 
             bool passed = false;
@@ -292,7 +290,7 @@ namespace ZL.Gear.Engine.Evaluation
                     // 增加 try-catch 防止正则表达式格式错误导致崩
                     try
                     {
-                        passed = Regex.IsMatch(strVal, expectedStr);
+                        passed = Regex.IsMatch(strVal, expectedStr, RegexOptions.None, TimeSpan.FromSeconds(1));
                         desc = $"匹配正则 '{expectedStr}'";
                     }
                     catch
@@ -318,7 +316,7 @@ namespace ZL.Gear.Engine.Evaluation
             string s = obj.ToString();
 
             // 数字转布尔
-            if (double.TryParse(s, out double d)) return Math.Abs(d) > 1E-9;
+            if (double.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double d)) return Math.Abs(d) > 1E-9;
 
             // 字符串转布尔
             if (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s.Equals("on", StringComparison.OrdinalIgnoreCase) || s == "1") return true;

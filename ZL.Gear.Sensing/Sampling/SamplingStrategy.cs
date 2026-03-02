@@ -113,6 +113,42 @@ namespace ZL.Gear.Sensing
             return samples.Last();
         }
     }
+    /// <summary>
+    /// 获取样本集合中的中位数。针对工业干扰大的环境非常有效。
+    /// </summary>
+    public class MedianCalculator<T> : IResultCalculator<T> where T : IComparable<T>
+    {
+        public string Name => "中位数";
+        public T Calculate(IReadOnlyList<T> samples)
+        {
+            if (samples == null || !samples.Any()) return default;
+            var sorted = samples.OrderBy(x => x).ToList();
+            int count = sorted.Count;
+            if (count % 2 == 0)
+            {
+                // 简化处理：偶数个取中间左侧
+                return sorted[count / 2 - 1];
+            }
+            return sorted[count / 2];
+        }
+    }
+
+    /// <summary>
+    /// 计算样本的标准差。用于评估产线稳定性 (GR&R)。
+    /// </summary>
+    public class StdDevCalculator<T> : IResultCalculator<T>
+    {
+        public string Name => "标准差";
+        public T Calculate(IReadOnlyList<T> samples)
+        {
+            if (samples == null || samples.Count < 2) return default;
+            var values = samples.Select(x => Convert.ToDouble(x, CultureInfo.InvariantCulture)).ToList();
+            double avg = values.Average();
+            double sum = values.Sum(v => Math.Pow(v - avg, 2));
+            double stdDev = Math.Sqrt(sum / (values.Count - 1));
+            return (T)Convert.ChangeType(Math.Round(stdDev, SamplingConstants.Precision + 2), typeof(T));
+        }
+    }
     #endregion
 
     /// <summary>

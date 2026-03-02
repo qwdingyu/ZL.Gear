@@ -25,7 +25,7 @@ namespace ZL.Gear.Engine.Runner
 
         public StepDispatcher(IActionRegistry actionService, Action<string> log)
         {
-            _actionService = actionService;
+            _actionService = actionService ?? throw new ArgumentNullException(nameof(actionService));
             _log = log ?? (s => { });
 
             // 注册标准动作
@@ -36,7 +36,17 @@ namespace ZL.Gear.Engine.Runner
             universalProvider.RegisterActions(_actionService);
 
             // 注册核心处理器
-            RegisterHandler("DynamicFlow", new DynamicFlowHandler());
+            var dynamicHandler = new DynamicFlowHandler();
+            RegisterHandler("DynamicFlow", dynamicHandler);
+            _actionService.RegisterAction("DynamicFlow", dynamicHandler.ExecuteAsync);
+
+            // 注册 PLC 处理器及动作
+            var plcHandler = new ZL.Gear.Drivers.Plc.Handlers.PlcStepHandler(_log);
+            RegisterHandler("WriteToPlc", plcHandler);
+            RegisterHandler("ReadFromPlc", plcHandler);
+            RegisterHandler("PlcHandshake", plcHandler);
+            RegisterHandler("PlcDelay", plcHandler);
+            _actionService.RegisterAction("PlcHandshake", plcHandler.ExecuteAsync);
             
             // 注册主从联动测量处理器
             RegisterHandler("TriggeredMeasure", new LinkageMeasureHandler(_log));
@@ -46,6 +56,11 @@ namespace ZL.Gear.Engine.Runner
             
             // 注册 MicroWorkflow 演示动作
             BuiltIn.MicroWorkflowDemoActions.Register(_actionService, _log);
+
+            // 注册 AI 决策处理器 (作为 Handler 和 Action)
+            var aiHandler = new Handlers.AiDecisionStepHandler();
+            RegisterHandler("AiDecision", aiHandler);
+            _actionService.RegisterAction("AiDecision", aiHandler.ExecuteAsync);
             
             // 注册通用设备调用处理器（最终回退）
             _commonHandler = new CommonHandler();
@@ -62,8 +77,19 @@ namespace ZL.Gear.Engine.Runner
             }
             _templateHandler = new TemplateFlowHandler(templatePath);
 
-            // 注册流水线中间件
+            // 注册流水线中间件 (从外向内排序)
             _pipeline.Use(new LoggingMiddleware(_log));
+            _pipeline.Use(new AuditLogMiddleware(_log));         // 审计日志 (合规门)
+            _pipeline.Use(new CircuitBreakerMiddleware(_log));  // 熔断保护 (防止连环车祸)
+            _pipeline.Use(new ConditionMiddleware());           // 逻辑执行守卫
+            _pipeline.Use(new SafetyCheckMiddleware(_log));     // 安全检查 (急停/门锁)
+            _pipeline.Use(new StepDelayMiddleware(_log));       // 硬件稳定延迟 (Settling Time)
+            _pipeline.Use(new TimeoutMiddleware(_log));         // 步骤级超时控制
+            _pipeline.Use(new ResourceLockMiddleware());        // 资源排他锁
+            _pipeline.Use(new RetryMiddleware());               // 自动重试
+            _pipeline.Use(new SnapshotMiddleware(_log));        // 失败快照自动保存
+            _pipeline.Use(new DiagnosticsMiddleware(_log));     // 实时诊断
+            _pipeline.Use(new VariableTraceMiddleware());       // 变量溯源追踪
         }
 
         public void RegisterHandler(string command, IStepHandler handler, bool allowOverwrite = true)
@@ -149,24 +175,14 @@ namespace ZL.Gear.Engine.Runner
                 handler = registeredHandler;
                 _log($"使用专用 Handler: {step.Command}");
             }
-            else
+            else if (_templateHandler.HasTemplate(step.Command))
             {
                 // 策略 2: 尝试 JSON DSL 模板
-                var templateResult = await _templateHandler.ExecuteAsync(step, context);
-                if (templateResult.Success)
-                {
-                    // 模板执行成功，转换结果格式
-                    if (templateResult is ExecutionResult<List<Measurement>> listResult)
-                    {
-                        return listResult;
-                    }
-                    if (templateResult.GetValueAsObject() is Measurement single)
-                    {
-                        return ExecutionResult<List<Measurement>>.Succeeded(new List<Measurement> { single });
-                    }
-                    return ExecutionResult<List<Measurement>>.Succeeded(new List<Measurement>());
-                }
-
+                handler = _templateHandler;
+                _log($"使用 DSL 模板执行: {step.Command}");
+            }
+            else
+            {
                 // 策略 3: 使用 CommonHandler 通用设备调用（最终回退）
                 _log($"未找到专用 Handler 和 DSL 模板，使用通用设备调用: {step.Command}");
                 handler = _commonHandler;
@@ -204,9 +220,8 @@ namespace ZL.Gear.Engine.Runner
             }
             catch (Exception ex)
             {
-                // Print stack trace to console for debugging
-                Console.WriteLine($"[StepDispatcher] Exception in step {step.StepName}: {ex}");
-                return ExecutionResult<List<Measurement>>.Failed($"执行错误: {ex.Message}");
+                _log($"[StepDispatcher] Exception in step {step.StepName}: {ex}");
+                return ExecutionResult<List<Measurement>>.Failed($"执行错误: {ex.ToString().Replace("\r", "").Replace("\n", " ")}");
             }
         }
 

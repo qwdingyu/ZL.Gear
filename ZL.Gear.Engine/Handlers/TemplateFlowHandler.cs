@@ -45,6 +45,12 @@ namespace ZL.Gear.Engine
             return await _flowHandler.ExecuteAsync(stepClone, context);
         }
 
+        public bool HasTemplate(string command)
+        {
+            if (string.IsNullOrEmpty(command)) return false;
+            return GetTemplateJson(command) != null;
+        }
+
         private string GetTemplateJson(string command)
         {
             if (_templateCache.TryGetValue(command, out var cached)) return cached;

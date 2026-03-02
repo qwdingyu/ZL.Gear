@@ -81,21 +81,35 @@ namespace ZL.Gear.Engine
         public async Task<ExecutionResultBase> ExecuteAsync(StepConfig step, StepContext context)
         {
             // 1. 解析 JSON 定义
-            if (step.Parameters == null || !step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
+            DynamicWorkflowConfig flowConfig = null;
+            if (step.Parameters != null && step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
             {
-                return ExecutionResult.Failed("缺少 WorkflowDefinition 参数");
+                try
+                {
+                    // 兼容 JObject 或 string
+                    string json = defObj is string s ? s : defObj.ToString();
+                    flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
+                }
+                catch (Exception ex)
+                {
+                    return ExecutionResult.Failed($"工作流定义解析失败: {ex.Message}");
+                }
             }
-
-            DynamicWorkflowConfig flowConfig;
-            try
+            else if (step.Parameters != null && (step.Parameters.ContainsKey("Sequence") || step.Parameters.ContainsKey("sequence")))
             {
-                // 兼容 JObject 或 string
-                string json = defObj is string s ? s : defObj.ToString();
-                flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
+                try
+                {
+                    string json = JsonConvert.SerializeObject(step.Parameters);
+                    flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
+                }
+                catch (Exception ex)
+                {
+                    return ExecutionResult.Failed($"工作流配置反序列化失败: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+            else
             {
-                return ExecutionResult.Failed($"工作流定义解析失败: {ex.Message}");
+                return ExecutionResult.Failed("缺少 WorkflowDefinition 参数或完整的流程配置");
             }
 
             // 1.5 创建“流程级”子作用域，隔离外部变量污染
@@ -268,6 +282,17 @@ namespace ZL.Gear.Engine
                         return m.Success ? ExecutionResult.Succeeded(m.Message) : ExecutionResult.Failed(m.Message);
                     };
                 }
+                // 策略增强 2：如果是复合节点（如 Sequence/Group），支持递归执行
+                else if (node.Children != null && node.Children.Count > 0)
+                {
+                    targetAction = async (s, c) => {
+                        // 创建一个临时配置，将当前节点的子节点作为序列传入
+                        var subConfig = (StepConfig)s.Clone();
+                        subConfig.Parameters["Sequence"] = node.Children;
+                        // 递归调用当前的 Handler
+                        return await this.ExecuteAsync(subConfig, c);
+                    };
+                }
             }
 
             return async (originalStep, originalCtx) =>
@@ -289,6 +314,7 @@ namespace ZL.Gear.Engine
 
                 // 3. 构建临时运行时配置
                 var runtimeConfig = (StepConfig)originalStep.Clone();
+                runtimeConfig.Command = node.ActionKey;
                 
                 // 3.1 处理主设备 Target
                 if (!string.IsNullOrEmpty(node.Target))
@@ -383,6 +409,8 @@ namespace ZL.Gear.Engine
 
                 // 3. 配置注入
                 var runtimeConfig = (StepConfig)originalStep.Clone();
+                runtimeConfig.Command = node.ActionKey;
+
                 if (!string.IsNullOrEmpty(node.Target))
                 {
                     runtimeConfig.Target = originalCtx.ResolveText(node.Target);

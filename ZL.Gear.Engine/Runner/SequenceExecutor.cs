@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Events;
 using ZL.Gear.Core.Models;
@@ -19,7 +21,12 @@ using ZL.Gear.Engine.Evaluation;
 namespace ZL.Gear.Engine.Runner
 {
     /// <summary>
-    /// 纯粹的执行引擎，不负责创建依赖项
+    /// 序列执行引擎 (The Heart of ZL.Gear)
+    /// 职责：
+    /// 1. 资源编排：根据测试需求动态租用(Lease)物理设备。
+    /// 2. 流程步进：支持顺序执行、并行执行以及基于条件的逻辑分支。
+    /// 3. 上下文隔离：为每一次测试执行提供独立的运行空间，是支持 Multi-Site 的核心基础。
+    /// 4. 生命周期管理：负责测试从开始、执行、判定到资源归还的全生命周期维护。
     /// </summary>
     public class SequenceExecutor : IDisposable
     {
@@ -29,12 +36,17 @@ namespace ZL.Gear.Engine.Runner
         private CancellationTokenSource _cancellationTokenSource;
         private bool _disposed;
         private readonly Stopwatch _totalSw = new();
-        private IDictionary<string, object> deviceRoles = new Dictionary<string, object>();
+        /// <summary>
+        /// 局部设备角色映射表（Site-Specific Roles）
+        /// 支持逻辑设备名（如 "Scanner"）到物理设备名（如 "Keyence_Fixed_01"）的映射。
+        /// 在 Multi-Site 场景下，不同工位的相同角色会映射到不同的物理硬件。
+        /// </summary>
+        private System.Collections.Concurrent.ConcurrentDictionary<string, object> deviceRoles = new System.Collections.Concurrent.ConcurrentDictionary<string, object>();
         
         /// <summary>
-        /// 测试步骤间隔
+        /// 测试步骤之间的强制最小延迟，用于保护物理触点或等待 PLC 扫描周期。
         /// </summary>
-        private readonly int TestStepInterval = 500;
+        private int _testStepInterval = 50;
         private IProgress<StepRunResult> _progressReporter;
 
         private void _log(string msg) => _logger?.LogInformation(msg);
@@ -51,8 +63,11 @@ namespace ZL.Gear.Engine.Runner
             _deviceService = deviceService ?? throw new ArgumentNullException(nameof(deviceService));
             _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
             _logger = logger;
-            TestStepInterval = testStepInterval;
-            deviceRoles = _profileService.LoadDeviceRoles();
+            _testStepInterval = testStepInterval;
+            var roles = _profileService.LoadDeviceRoles();
+            deviceRoles = roles != null 
+                ? new System.Collections.Concurrent.ConcurrentDictionary<string, object>(roles)
+                : new System.Collections.Concurrent.ConcurrentDictionary<string, object>();
         }
 
         private void Log(string message)
@@ -85,9 +100,21 @@ namespace ZL.Gear.Engine.Runner
         {
             _progressReporter = progress;
             if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
-            await Task.Delay(500, token);
+            
+            // Dispose existing CTS to prevent memory leak
+            if (_cancellationTokenSource != null)
+            {
+                _cancellationTokenSource.Dispose();
+            }
             _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
             var cancellationToken = _cancellationTokenSource.Token;
+
+            // 动态调整间隔 (支持从全局上下文中读取)
+            if (globalContext != null && globalContext.TryGetValue("TestStepInterval", out var intervalObj) && int.TryParse(intervalObj?.ToString(), out var intervalVal))
+            {
+                _testStepInterval = intervalVal;
+                _log($"[配置] 步骤执行间隔已调整为: {_testStepInterval}ms");
+            }
 
             var testWasStoppedByFail = false;
             var sharedData = new ContextVariableStore();
@@ -105,6 +132,7 @@ namespace ZL.Gear.Engine.Runner
             Dictionary<string, IDevice> activeDevices = new();
             try
             {
+                bool leaseSuccess = true;
                 try
                 {
                     // === 1. 资源管理阶段 ===
@@ -112,21 +140,14 @@ namespace ZL.Gear.Engine.Runner
                 }
                 catch (Exception ex)
                 {
+                    leaseSuccess = false;
                     runResult.OverallSuccess = false;
                     runResult.Summary = $"未找到该步骤对应的设备，或设备未启用: {ex.Message}";
                     _log($"[严重错误] {runResult.Summary}");
                     TestEvents.StatusChanged?.Invoke("Error");
-                    // GlobalEvents.OnUiMainTipChanged?.Invoke("未找到该步骤对应的设备，或设备未启用！", false);
                 }
-                if (activeDevices.Count == 0)
-                {
-                    runResult.OverallSuccess = false;
-                    runResult.Summary = $"未找到该步骤对应的设备，或设备未启用！";
-                    _log($"[严重错误] {runResult.Summary}");
-                    TestEvents.StatusChanged?.Invoke("Error");
-                    // GlobalEvents.OnUiMainTipChanged?.Invoke("未找到该步骤对应的设备，或设备未启用！", false);
-                }
-                else
+                
+                if (leaseSuccess)
                 {
                     // ====================================================================
                     //  在执行任何步骤前，预扫描并创建所有主从信令对象
@@ -181,7 +202,11 @@ namespace ZL.Gear.Engine.Runner
                             testWasStoppedByFail = true;
                             break;
                         }
-                        await Task.Delay(TestStepInterval, cancellationToken);
+                        
+                        if (_testStepInterval > 0)
+                        {
+                            await Task.Delay(_testStepInterval, cancellationToken);
+                        }
                     }
                     runResult.EndTime = DateTime.Now;
                     // 5. 最终判定
@@ -224,8 +249,8 @@ namespace ZL.Gear.Engine.Runner
             }
             else
             {
-                //如果租赁设备的时候就异常了，或者 所有的步骤都没有返回测试结果 直接返回错误
-                runResult.OverallSuccess = activeDevices.Count == 0 ? false : (runResult.StepResults?.Count == 0 ? false : runResult.StepResults.All(r => r.IsBranchSuccessful));
+                // 修复无设备需求报错
+                runResult.OverallSuccess = runResult.StepResults?.Count > 0 && runResult.StepResults.All(r => r.IsBranchSuccessful);
             }
             runResult.Summary = BuildSummary(runResult);
             HandleFinalResultsAsync(runResult, steps, model, barcode);
@@ -246,6 +271,9 @@ namespace ZL.Gear.Engine.Runner
             {
                 _log($"[警告] 数据一致性检查失败: {ex.Message}");
             }
+
+            // 输出脚本自诊断报告
+            _log(ZL.Gear.Engine.Runner.Middlewares.DiagnosticsMiddleware.GenerateReport());
 
             return runResult;
         }
@@ -292,7 +320,7 @@ namespace ZL.Gear.Engine.Runner
 
                     _log($"[诊断] 步骤 {stepConfig.StepName} 的所有子步骤执行完成");
                 }
-                if (stepConfig.StepType.ToUpper() != "GROUP")
+                if (!string.Equals(stepConfig.StepType, "GROUP", StringComparison.OrdinalIgnoreCase))
                 {
                     // 2. 执行本步骤自身的原子命令（仅当所有子步骤都通过时）
                     StepConfigNormalizer.Normalize(stepConfig, deviceRoles);
@@ -310,8 +338,7 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     //为了兼容老的代码，诸如 条码比对action已经检测过了，在此就不做结果评价了
-                    var Command = stepConfig.Command;
-                    var _Command = Command.ToUpper();
+                                        var _Command = stepConfig.Command?.ToUpperInvariant();
                     if (_Command == "BARCODECHECK" || _Command == "ECUPOWER" || _Command == "PLCDELAY" || _Command == "AUTOSBRSENSORCHECK")
                     {
                         stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
@@ -322,25 +349,33 @@ namespace ZL.Gear.Engine.Runner
                         stepResult.Message = measurementResult.Message;
                         _log($"[诊断] 步骤 {stepConfig.StepName} 产生 {ValueCount} 条测量数据");
 
-                        // 3. 评估结果（使用重构后的评估器）
-                        // 关键修复：先设置 Status 为 Completed，避免评估器检查失败
                         stepResult.Status = StepExecutionStatus.Completed;
-                        var evaluationResult = ResultEvaluator.Evaluate(stepResult, stepConfig);
-                        _log($"[诊断] 评估详情: ExecutionType={stepConfig.ExecutionType}, ExpectedResults.Count={stepConfig.ExpectedResults?.Count ?? 0}");
-                        _log($"[诊断] stepResult.Status={stepResult.Status}, stepResult.Outcome={stepResult.Outcome}");
-                        _log($"[诊断] 评估结果: Success={evaluationResult.Success}, Message={evaluationResult.Message}");
-                        _log($"[诊断] 即将设置 stepResult.Outcome");
-                        stepResult.Outcome = evaluationResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
-                        _log($"[诊断] 已设置 stepResult.Outcome={stepResult.Outcome}");
 
-                        _log($"[评估] 步骤 {stepConfig.StepName} 评估结果: {evaluationResult.Success}, 消息: {evaluationResult.Message}");
-                        // 使用评估器的详细消息
-                        if (!string.IsNullOrEmpty(evaluationResult.Message))
+                        if (!measurementResult.Success)
                         {
-                            stepResult.Message = evaluationResult.Message;
+                            // 如果 dispatch 阶段就失败了（动作执行失败、通信超时、缺少参数等），直接判断为 Failed。
+                            stepResult.Outcome = StepOutcome.Failed;
+                            _log($"[评估] 步骤 {stepConfig.StepName} 执行失败: {measurementResult.Message}");
                         }
+                        else
+                        {
+                            // 3. 评估结果（使用重构后的评估器）
+                            var evaluationResult = ResultEvaluator.Evaluate(stepResult, stepConfig);
+                            _log($"[诊断] 评估详情: ExecutionType={stepConfig.ExecutionType}, ExpectedResults.Count={stepConfig.ExpectedResults?.Count ?? 0}");
+                            _log($"[诊断] stepResult.Status={stepResult.Status}, stepResult.Outcome={stepResult.Outcome}");
+                            _log($"[诊断] 评估结果: Success={evaluationResult.Success}, Message={evaluationResult.Message}");
+                            _log($"[诊断] 即将设置 stepResult.Outcome");
+                            stepResult.Outcome = evaluationResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
+                            _log($"[诊断] 已设置 stepResult.Outcome={stepResult.Outcome}");
 
-                        _log($"[评估] 步骤 {stepConfig.StepName} 评估结果: {evaluationResult.Success}, 消息: {evaluationResult.Message}");
+                            // 使用评估器的详细消息
+                            if (!string.IsNullOrEmpty(evaluationResult.Message))
+                            {
+                                stepResult.Message = evaluationResult.Message;
+                            }
+
+                            _log($"[评估] 步骤 {stepConfig.StepName} 评估结果: {evaluationResult.Success}, 消息: {evaluationResult.Message}");
+                        }
                     }
                 }
             }
@@ -377,7 +412,7 @@ namespace ZL.Gear.Engine.Runner
             _log($"[子步骤] 开始执行 {parentConfig.StepName} 的 {parentConfig.SubSteps.Count} 个子步骤，模式: {parentConfig.ExecutionMode}");
 
             // 修复：预先建立配置映射，避免并行环境中的查找
-            var stepMapping = parentConfig.SubSteps.ToDictionary(c => c.StepKey);
+            var stepMapping = parentConfig.SubSteps.GroupBy(c => c.StepKey).ToDictionary(g => g.Key, g => g.First());
             //主步骤里面的 ExecutionMode 才有效，如果为叶子节点，则无效
             if (parentConfig.ExecutionMode == StepExecutionMode.Parallel)
             {
@@ -453,16 +488,21 @@ namespace ZL.Gear.Engine.Runner
         private async Task<Dictionary<string, IDevice>> LeaseRequiredDevicesAsync(List<StepConfig> steps, List<IDisposable> leases, CancellationToken token)
         {
             var requiredDeviceKeys = CollectRequiredDevices(steps);
-            var activeDevices = new Dictionary<string, IDevice>();
-            _log($"准备租用 {requiredDeviceKeys.Count} 个设备: {string.Join(", ", requiredDeviceKeys)}");
-            foreach (var key in requiredDeviceKeys)
+            var activeDevices = new System.Collections.Concurrent.ConcurrentDictionary<string, IDevice>();
+            
+            _log($"准备并发租用 {requiredDeviceKeys.Count} 个设备: {string.Join(", ", requiredDeviceKeys)}");
+            
+            var leaseTasks = requiredDeviceKeys.Select(async key =>
             {
                 var lease = await _deviceService.LeaseAsync<IDevice>(key, token);
-                leases.Add(lease);
-                activeDevices.Add(key, lease.Device);
-            }
-            _log("所有设备租用成功。");
-            return activeDevices;
+                lock (leases) { leases.Add(lease); }
+                activeDevices.TryAdd(key, lease.Device);
+            });
+
+            await Task.WhenAll(leaseTasks);
+            
+            _log("所有设备并发租用及初始化成功。");
+            return activeDevices.ToDictionary(k => k.Key, v => v.Value);
         }
 
         private void HandleFinalResultsAsync(TestRunResult runResult, List<StepConfig> _originalConfigs, string model, string barcode)
@@ -508,7 +548,13 @@ namespace ZL.Gear.Engine.Runner
             collect = (step) =>
             {
                 if (!step.Enable) return;
-                if (!string.IsNullOrEmpty(step.Target)) keys.Add(step.Target);
+                if (!string.IsNullOrEmpty(step.Target))
+                {
+                    if (deviceRoles.ContainsKey(step.Target))
+                        keys.Add(deviceRoles[step.Target].ToString());
+                    else
+                        keys.Add(step.Target);
+                }
                 // 添加所有额外目标设备
                 if (step.AdditionalTargets != null)
                 {
@@ -530,10 +576,72 @@ namespace ZL.Gear.Engine.Runner
                 {
                     foreach (var sub in step.SubSteps) collect(sub);
                 }
+
+                // 【关键增强】扫描 Parameters 中的 DynamicFlow 定义，找出嵌套设备需求
+                if (step.Parameters != null)
+                {
+                    foreach (var kvp in step.Parameters)
+                    {
+                        CollectNestedTargets(kvp.Value, keys);
+                    }
+                }
             };
             // 从顶层步骤开始收集
             foreach (var topLevelStep in sequence) collect(topLevelStep);
             return keys;
+        }
+
+        /// <summary>
+        /// 深度优先扫描对象（支持 JObject/JArray/Dictionary 混合模式），提取其中的 Target 字段
+        /// </summary>
+        private void CollectNestedTargets(object obj, HashSet<string> keys)
+        {
+            if (obj == null) return;
+
+            if (obj is JObject jobj)
+            {
+                foreach (var prop in jobj.Properties())
+                {
+                    if (prop.Name == "Target" && (prop.Value.Type == JTokenType.String || prop.Value.Type == JTokenType.Raw))
+                    {
+                        var target = prop.Value.ToString();
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            if (deviceRoles.ContainsKey(target))
+                                keys.Add(deviceRoles[target]?.ToString() ?? target);
+                            else
+                                keys.Add(target);
+                        }
+                    }
+                    CollectNestedTargets(prop.Value, keys);
+                }
+            }
+            else if (obj is JArray jarr)
+            {
+                foreach (var item in jarr) CollectNestedTargets(item, keys);
+            }
+            else if (obj is IDictionary<string, object> dict)
+            {
+                foreach (var kvp in dict)
+                {
+                    if (kvp.Key == "Target" && kvp.Value != null)
+                    {
+                        var target = kvp.Value.ToString();
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            if (deviceRoles.ContainsKey(target))
+                                keys.Add(deviceRoles[target]?.ToString() ?? target);
+                            else
+                                keys.Add(target);
+                        }
+                    }
+                    CollectNestedTargets(kvp.Value, keys);
+                }
+            }
+            else if (obj is IEnumerable<object> list)
+            {
+                foreach (var item in list) CollectNestedTargets(item, keys);
+            }
         }
         // 辅助方法：递归应用 Profile
         // 建议将其放到 StepConfigKit 中，但为了快速生效，暂置于此

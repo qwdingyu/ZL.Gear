@@ -75,13 +75,34 @@ namespace ZL.Gear.Core.Protocols
                 }
             }
 
-            // 添加终止符
+            // 添加终止符 (仅 ASCII 模式)
             string term = _config.Terminator ?? "\n";
-            if (!commandToSend.EndsWith(term))
+            bool isHex = string.Equals(_config.Encoding, "Hex", StringComparison.OrdinalIgnoreCase);
+
+            byte[] dataToSend;
+
+            if (isHex)
             {
-                commandToSend += term;
+                // Hex 模式: 将 "01 03 FF" 转换为字节数组
+                // 移除所有空格和分隔符
+                string hexClean = commandToSend.Replace(" ", "").Replace("-", "").Replace("0x", "");
+                if (hexClean.Length % 2 != 0) throw new FormatException($"Invalid Hex string length: {commandToSend}");
+                
+                dataToSend = new byte[hexClean.Length / 2];
+                for (int i = 0; i < hexClean.Length; i += 2)
+                {
+                    dataToSend[i / 2] = Convert.ToByte(hexClean.Substring(i, 2), 16);
+                }
             }
-            byte[] dataToSend = System.Text.Encoding.ASCII.GetBytes(commandToSend);
+            else
+            {
+                // ASCII 模式: 自动追加终止符
+                if (!commandToSend.EndsWith(term))
+                {
+                    commandToSend += term;
+                }
+                dataToSend = System.Text.Encoding.ASCII.GetBytes(commandToSend);
+            }
 
             await transport.SendAsync(dataToSend, token);
             _lastExecutionTime = DateTime.Now;

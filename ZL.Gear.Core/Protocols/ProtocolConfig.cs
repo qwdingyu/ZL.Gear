@@ -26,6 +26,11 @@ namespace ZL.Gear.Core.Protocols
         public int DefaultTimeoutMs { get; set; } = 2000;
 
         /// <summary>
+        /// 编码格式: "ASCII" (默认) 或 "Hex" (十六进制字符串，如 "01 03 00")
+        /// </summary>
+        public string Encoding { get; set; } = "ASCII";
+
+        /// <summary>
         /// 命令间的固定等待时间 (毫秒)，用于防止指令发送过快
         /// </summary>
         public int InterCommandWaitMs { get; set; } = 50;

@@ -8,7 +8,13 @@ using ZL.Gear.Core.Workflow;
 
 namespace ZL.Gear.Core.Models
 {
-
+    /// <summary>
+    /// 测试步骤执行上下文 (Scope & Data Container)
+    /// 职责：
+    /// 1. 作用域隔离：这是实现 Multi-Site 的核心载体。每个工位或线程执行时，都拥有一个独立的 Context 实例。
+    /// 2. 数据桥梁：连接了配置(StepConfig)、实时变量(Variables)、硬件实例(ActiveDevices)和系统服务。
+    /// 3. 生命感知：携带 CancellationToken，确保整个执行链可以被精准取消。
+    /// </summary>
     public sealed class StepContext : IServiceProvider
     {
         // === 基础属性 ===
@@ -38,7 +44,8 @@ namespace ZL.Gear.Core.Models
         public IReadOnlyDictionary<string, object> GlobalContext { get; }
 
         /// <summary>
-        /// 流程动态变量池 (State) - 替代原 SharedData
+        /// 运行时的变量存储空间 (Scope Variables)
+        /// 包含了对当前工位可见的局部变量、计算结果。
         /// </summary>
         public ContextVariableStore Variables { get; }
         //public Action<string> Log { get; private set; }
@@ -56,10 +63,10 @@ namespace ZL.Gear.Core.Models
 
         // === 4. 资源与服务 ===
         /// <summary>
-        /// 已租用的硬件设备
-        ///存放本次测试序列已经租用好的设备
+        /// 已租用的设备实例集合 (Site-Specific Devices)
+        /// 仅包含当前执行链有权访问的硬件。
         /// </summary>
-        public IReadOnlyDictionary<string, IDevice> ActiveDevices { get; set; }
+        public IReadOnlyDictionary<string, IDevice> ActiveDevices { get; }
 
         /// <summary>
         /// DI 容器提供者

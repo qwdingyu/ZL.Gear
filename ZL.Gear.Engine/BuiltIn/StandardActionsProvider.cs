@@ -1,5 +1,7 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
+using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Workflow;
 
@@ -24,6 +26,52 @@ namespace ZL.Gear.Engine
 
             // 可以在这里注册一些非常高频使用的短名，作为 Alias; 但要注意冲突风险
             registry.RegisterAction("Delay", DelayLogic, RegistrationPolicy.Ignore);
+
+            // --- 设备通用操作元语 (Primitives for Device Interaction) ---
+            registry.RegisterAction("Write", async (step, ctx) =>
+            {
+                var targetId = step.Target;
+                if (string.IsNullOrEmpty(targetId)) return ExecutionResult.Failed("Write 动作缺少 Target 设备");
+
+                var device = ctx.GetDevice<IDevice>(targetId);
+                var commandName = ctx.Get<string>("Command") ?? "Write";
+                var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
+                return result.Success ? ExecutionResult.Succeeded(result.Message) : ExecutionResult.Failed(result.Message);
+            });
+
+            registry.RegisterAction("Read", async (step, ctx) =>
+            {
+                var targetId = step.Target;
+                if (string.IsNullOrEmpty(targetId)) return ExecutionResult.Failed("Read 动作缺少 Target 设备");
+
+                var device = ctx.GetDevice<IDevice>(targetId);
+                var commandName = ctx.Get<string>("Command") ?? "Read";
+                var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
+                return result.Success ? ExecutionResult<object>.Succeeded(result.Value, result.SamplesCollected, result.Message) : ExecutionResult.Failed(result.Message);
+            });
+
+            registry.RegisterAction("Query", async (step, ctx) =>
+            {
+                var targetId = step.Target;
+                if (string.IsNullOrEmpty(targetId)) return ExecutionResult.Failed("Query 动作缺少 Target 设备");
+
+                var device = ctx.GetDevice<IDevice>(targetId);
+                var commandName = ctx.Get<string>("Command") ?? "Query";
+                
+                var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
+                return result.Success ? ExecutionResult<object>.Succeeded(result.Value, result.SamplesCollected, result.Message) : ExecutionResult.Failed(result.Message);
+            });
+
+            registry.RegisterMeasurement("Read", async (step, ctx) =>
+            {
+                var targetId = step.Target;
+                if (string.IsNullOrEmpty(targetId)) return Measurement.Create(step.StepName, null, false, "Read 测量缺少 Target 设备");
+
+                var device = ctx.GetDevice<IDevice>(targetId);
+                var commandName = ctx.Get<string>("Command") ?? "Read";
+                var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
+                return Measurement.Create(step.MeasurementKey, result.Value, result.Success, result.Message);
+            });
 
             registry.RegisterAction("SetVariable", async (step, ctx) =>
             {
@@ -53,6 +101,26 @@ namespace ZL.Gear.Engine
                     return ExecutionResult.Failed(msg);
                 }
                 return ExecutionResult.Succeeded();
+            });
+
+            registry.RegisterAction("Calculate", async (step, ctx) =>
+            {
+                var expression = ctx.Get<string>("Expression");
+                var outputKey = ctx.Get<string>("OutputKey") ?? "CalcResult";
+
+                if (string.IsNullOrEmpty(expression)) return ExecutionResult.Failed("Calculate 缺少 'Expression' 参数");
+
+                try
+                {
+                    // 使用动态值评估引擎评估表达式内容 (例如 @{1 + 2})
+                    var result = ctx.EvaluateValue(expression);
+                    ctx.Variables.Set(outputKey, result);
+                    return ExecutionResult.Succeeded($"计算完成: {expression} = {result}");
+                }
+                catch (Exception ex)
+                {
+                    return ExecutionResult.Failed($"计算失败: {ex.Message}");
+                }
             });
 
             // --- 主从同步动作 ---
@@ -85,9 +153,15 @@ namespace ZL.Gear.Engine
             int delayMs = step.TimeoutMs > 0 ? step.TimeoutMs : 1000;
 
             // 如果你想更灵活，支持从 Parameters 读取动态延时
-            if (step.Parameters != null && step.Parameters.TryGetValue("Duration", out var val))
+            if (step.Parameters != null)
             {
-                if (int.TryParse(val?.ToString(), out int d)) delayMs = d;
+                if (step.Parameters.TryGetValue("Duration", out var val) || 
+                    step.Parameters.TryGetValue("DelayMs", out val) ||
+                    step.Parameters.TryGetValue("delayMs", out val) ||
+                    step.Parameters.TryGetValue("Delay", out val))
+                {
+                    if (int.TryParse(val?.ToString(), out int d)) delayMs = d;
+                }
             }
 
             ctx.Log($"-> 系统延时: {delayMs}ms");

@@ -44,9 +44,10 @@ namespace ZL.Gear.Core.Devices
     /// </summary>
     public class UnifiedDeviceLoaderInstance
     {
-        private readonly Dictionary<string, UnifiedDeviceConfig> _cache = 
-            new Dictionary<string, UnifiedDeviceConfig>(StringComparer.OrdinalIgnoreCase);
+        private System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig> _cache = 
+            new System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig>(StringComparer.OrdinalIgnoreCase);
         
+        private readonly object _loadLock = new object();
         private string? _userConfigPath;
         private readonly List<string> _embeddedAssemblies = new List<string>();
         private readonly IDeviceLogger _log;
@@ -74,25 +75,30 @@ namespace ZL.Gear.Core.Devices
         /// </summary>
         /// <param name="userConfigPath">用户配置文件路径，为空则只加载内置配置</param>
         /// <returns>设备配置字典</returns>
-        public Dictionary<string, UnifiedDeviceConfig> Load(string? userConfigPath = null)
+        public System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig> Load(string? userConfigPath = null)
         {
-            _cache.Clear();
-            _userConfigPath = userConfigPath;
-            
-            LoadEmbeddedConfigs();
-            
-            if (!string.IsNullOrEmpty(userConfigPath) && File.Exists(userConfigPath))
+            lock (_loadLock)
             {
-                LoadUserConfig(userConfigPath);
+                // 使用临时字典进行加载，加载完成后原子交换，保证读取线程的一致性
+                var newCache = new System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig>(StringComparer.OrdinalIgnoreCase);
+                _userConfigPath = userConfigPath;
+                
+                LoadEmbeddedConfigs(newCache);
+                
+                if (!string.IsNullOrEmpty(userConfigPath) && File.Exists(userConfigPath))
+                {
+                    LoadUserConfig(userConfigPath, newCache);
+                }
+                
+                _cache = newCache;
+                return _cache;
             }
-            
-            return _cache;
         }
 
         /// <summary>
         /// 加载内置配置（从程序集嵌入资源）
         /// </summary>
-        private void LoadEmbeddedConfigs()
+        private void LoadEmbeddedConfigs(System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig> targetCache)
         {
             foreach (var assemblyName in _embeddedAssemblies)
             {
@@ -122,7 +128,7 @@ namespace ZL.Gear.Core.Devices
                                 {
                                     if (device.Enabled && !string.IsNullOrEmpty(device.Code))
                                     {
-                                        _cache[device.Code] = device;
+                                        targetCache[device.Code] = device;
                                     }
                                 }
                                 _log.Info("从 {0} 加载了 {1} 个设备", resourceName, collection.Devices.Count);
@@ -140,7 +146,7 @@ namespace ZL.Gear.Core.Devices
         /// <summary>
         /// 加载用户配置（覆盖内置配置）
         /// </summary>
-        private void LoadUserConfig(string configPath)
+        private void LoadUserConfig(string configPath, System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig> targetCache)
         {
             try
             {
@@ -158,11 +164,11 @@ namespace ZL.Gear.Core.Devices
                     {
                         if (device.Enabled)
                         {
-                            _cache[device.Code] = device;
+                            targetCache[device.Code] = device;
                         }
-                        else if (_cache.ContainsKey(device.Code))
+                        else if (targetCache.ContainsKey(device.Code))
                         {
-                            _cache.Remove(device.Code);
+                            targetCache.TryRemove(device.Code, out _);
                         }
                     }
                 }
@@ -191,9 +197,9 @@ namespace ZL.Gear.Core.Devices
         /// </summary>
         public IReadOnlyDictionary<string, UnifiedDeviceConfig> GetAll()
         {
-            if (_cache.Count == 0)
+            if (_cache.IsEmpty)
             {
-                Load();
+                Load(_userConfigPath);
             }
             return _cache;
         }
@@ -235,7 +241,7 @@ namespace ZL.Gear.Core.Devices
         public static void RegisterEmbeddedAssembly(string assemblyName) 
             => _instance.RegisterEmbeddedAssembly(assemblyName);
 
-        public static Dictionary<string, UnifiedDeviceConfig> Load(string? userConfigPath = null) 
+        public static System.Collections.Concurrent.ConcurrentDictionary<string, UnifiedDeviceConfig> Load(string? userConfigPath = null) 
             => _instance.Load(userConfigPath);
 
         public static UnifiedDeviceConfig? Get(string deviceCode) 

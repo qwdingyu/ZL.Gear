@@ -16,6 +16,8 @@ namespace ZL.Gear.Sensing.Sampling
                 {
                     "Max" => new MaxCalculator<double>(),
                     "Min" => new MinCalculator<double>(),
+                    "Median" => new MedianCalculator<double>(),
+                    "StdDev" => new StdDevCalculator<double>(),
                     "Last" => new LastValueCalculator<double>(),
                     _ => new AverageCalculator<double>()
                 };
