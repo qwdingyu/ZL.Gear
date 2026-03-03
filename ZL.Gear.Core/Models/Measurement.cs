@@ -449,11 +449,10 @@ namespace ZL.Gear.Core.Models
                         var value = Convert.ChangeType(kvp.Value, prop.PropertyType);
                         prop.SetValue(result, value);
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         // 类型转换失败时静默跳过，不影响其他字段
                     }
-                    catch { }
                 }
             }
 

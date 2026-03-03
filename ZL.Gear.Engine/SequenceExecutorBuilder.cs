@@ -146,7 +146,8 @@ namespace ZL.Gear.Engine
             string? targetDeviceConfig = _deviceConfigPath;
             if (string.IsNullOrEmpty(targetDeviceConfig))
             {
-                try { targetDeviceConfig = libraryService.CurrentLibraryConfig?.DevicesPath; } catch { }
+                try { targetDeviceConfig = libraryService.CurrentLibraryConfig?.DevicesPath; } 
+                catch { /* 配置获取失败时使用默认值 */ }
             }
 
             if (!string.IsNullOrEmpty(targetDeviceConfig) && File.Exists(targetDeviceConfig))
