@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Events;
+using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
@@ -37,6 +38,11 @@ namespace ZL.Gear.Engine.Runner
         private bool _disposed;
         private readonly Stopwatch _totalSw = new();
         /// <summary>
+        /// 事件总线实例
+        /// </summary>
+        private readonly IEventBus _eventBus;
+
+        /// <summary>
         /// 局部设备角色映射表（Site-Specific Roles）
         /// 支持逻辑设备名（如 "Scanner"）到物理设备名（如 "Keyence_Fixed_01"）的映射。
         /// 在 Multi-Site 场景下，不同工位的相同角色会映射到不同的物理硬件。
@@ -57,11 +63,13 @@ namespace ZL.Gear.Engine.Runner
         public SequenceExecutor(
             IDeviceService deviceService, 
             IGearProfileService profileService,
+            IEventBus eventBus,
             ILogger<SequenceExecutor> logger, 
             int testStepInterval = 500)
         {
             _deviceService = deviceService ?? throw new ArgumentNullException(nameof(deviceService));
             _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
+            _eventBus = eventBus ?? Core.Infrastructure.DefaultEventBus.Instance; // 兼容缺省注入
             _logger = logger;
             _testStepInterval = testStepInterval;
             var roles = _profileService.LoadDeviceRoles();
@@ -125,7 +133,7 @@ namespace ZL.Gear.Engine.Runner
             _log($"测试开始: 型号={model}, 条码={barcode}");
             _log("==================================================");
 
-            TestEvents.StatusChanged?.Invoke("Running");
+            _eventBus.Publish(new RunStateChangedEvent(RunState.Testing));
             _totalSw.Restart();
             // 启动后台计时器任务，但「不要 await」它，让它在后台运行
             var timerTask = RunTimerLoopAsync(cancellationToken);
@@ -144,7 +152,7 @@ namespace ZL.Gear.Engine.Runner
                     runResult.OverallSuccess = false;
                     runResult.Summary = $"未找到该步骤对应的设备，或设备未启用: {ex.Message}";
                     _log($"[严重错误] {runResult.Summary}");
-                    TestEvents.StatusChanged?.Invoke("Error");
+                    _eventBus.Publish(new RunStateChangedEvent(RunState.Error, runResult.Summary));
                 }
                 
                 if (leaseSuccess)
@@ -226,7 +234,7 @@ namespace ZL.Gear.Engine.Runner
                 runResult.OverallSuccess = false;
                 runResult.Summary = $"测试序列因严重错误而中断: {ex.Message}";
                 _log($"[严重错误] {runResult.Summary}");
-                TestEvents.StatusChanged?.Invoke("Error");
+                _eventBus.Publish(new RunStateChangedEvent(RunState.Error, runResult.Summary));
             }
             finally
             {
@@ -290,8 +298,8 @@ namespace ZL.Gear.Engine.Runner
             stepResult.StartTime = DateTime.Now;
             stepResult.Status = StepExecutionStatus.Running;
             //本项目中仅限于用于PLC在SBR测试中加压负载完成通知 测试步骤测试电流   ？？？？？  不要有并行的主步骤，否则会错乱
-            RunnerEvents.StepStarted?.Invoke(context);
-            RunnerEvents.OnStepProgress?.Invoke(stepResult);
+            // RunnerEvents.StepStarted?.Invoke(context); // 逐步废弃
+            _eventBus.Publish(new StepProgressEvent(stepResult));
             _log($"[执行] {stepConfig.StepName}...");
             _log($"[诊断] 步骤 {stepConfig.StepKey} 有 {stepConfig.SubSteps?.Count ?? 0} 个子步骤");
             // --- UI 更新点 (阶段四) ---
@@ -401,7 +409,7 @@ namespace ZL.Gear.Engine.Runner
                 var outcomeDisplay = stepResult.Outcome == StepOutcome.Passed ? "PASS" : stepResult.Outcome.ToString().ToUpper();
                 _logger?.LogInformation($"[{outcomeDisplay}] {stepConfig.StepName} 耗时={stepResult.DurationSeconds:F2}s, 消息: {stepResult.Message}");
                 _progressReporter?.Report(stepResult);
-                RunnerEvents.OnStepProgress?.Invoke(stepResult);
+                _eventBus.Publish(new StepProgressEvent(stepResult));
             }
         }
         /// <summary>
@@ -510,8 +518,8 @@ namespace ZL.Gear.Engine.Runner
             // 如果条码为空，则认定为手动单项测试
             if (!string.IsNullOrEmpty(barcode))
             {
-                RunnerEvents.OnTestRunCompleted?.Invoke(runResult);
-                //TestEvents.StatusChanged?.Invoke(runResult.OverallSuccess ? "Completed" : "Failed");
+                _eventBus.Publish(new TestRunCompletedEvent(runResult));
+                _eventBus.Publish(new RunStateChangedEvent(runResult.OverallSuccess ? RunState.Stopped : RunState.Error));
             }
         }
 
@@ -664,7 +672,7 @@ namespace ZL.Gear.Engine.Runner
             if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
             {
                 _cancellationTokenSource.Cancel();
-                TestEvents.StatusChanged?.Invoke("Stopped");
+                _eventBus.Publish(new RunStateChangedEvent(RunState.Stopped, "用户停止"));
                 _log("收到停止请求，测试流程取消");
             }
         }

@@ -117,23 +117,5 @@ namespace ZL.Gear.Core.SampleSignal
             // 将 string/null 的结果转换为 bool
             return !string.IsNullOrEmpty(signaledChannel);
         }
-
-        /// <summary>
-        /// 为了兼容旧代码保留的 Subscribe 方法，实际上现在推荐使用 WaitForSampleAsync。
-        /// 此实现仅为了让旧代码不报错，不保证功能完全一致。
-        /// </summary>
-        [Obsolete("Use WaitForSampleAsync instead.")]
-        public static void Subscribe(string deviceId, string channel, Action handler)
-        {
-            // 空实现或简单的桥接，取决于是否还有强依赖
-            // 由于 SampleSignals 现在的逻辑是基于 AutoResetEvent 的，不支持多播委托回调。
-            // 如果必须支持，需要重构。但根据清理目标，建议标记为 Obsolete。
-        }
-
-        [Obsolete("Use WaitForSampleAsync instead.")]
-        public static void Unsubscribe(string deviceId, string channel, Action handler)
-        {
-            // 空实现
-        }
     }
 }

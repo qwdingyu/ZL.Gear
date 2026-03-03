@@ -29,7 +29,7 @@ namespace ZL.Gear.Sensing.Samplers
         public void Start()
         {
             if (_subscription != null) return;
-            _subscription = _bus.Subscribe<RealTimeUpdateEvent>(e =>
+            _subscription = _bus.Subscribe<MetricUpdateEvent>(e =>
             {
                 if (e.Key == _targetKey)
                 {

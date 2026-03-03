@@ -12,7 +12,7 @@ namespace ZL.Gear.Core.Configuration
         public string InfrastructurePath { get; set; }
         public string BarcodeRulesPath { get; set; }
         public string ModelListPath { get; set; }
-        public string SeatProfilePath { get; set; }
+        public string DeviceProfilePath { get; set; }
         public string StepCatalogPath { get; set; }
         public string ManualTestCatalogPath { get; set; }
     }

@@ -112,6 +112,11 @@ namespace ZL.Gear.Core.StepHandler
         /// 这是迈向纯 DTO 模型的中间步骤。
         /// </summary>
         public ExecutionResultBase ExecutionResult { get; set; }
+        
+        /// <summary>
+        /// 扩展元数据，用于存储步骤特定的运行数据（如传感器原始状态等）
+        /// </summary>
+        public Dictionary<string, object> Metadata { get; set; } = new();
 
         /// <summary>
         /// 构造函数，通常由执行器根据 StepConfig 创建。

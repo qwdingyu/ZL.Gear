@@ -9,46 +9,12 @@ namespace ZL.Gear.Core.Events
     }
 
     /// <summary>
-    /// UI 提示信息事件
-    /// </summary>
-    public class UiTipEvent : BaseEvent
-    {
-        public string Message { get; }
-        public bool IsSuccess { get; }
-
-        public UiTipEvent(string message, bool isSuccess = false)
-        {
-            Message = message;
-            IsSuccess = isSuccess;
-        }
-    }
-
-    /// <summary>
-    /// 全局扫码事件
+    /// 全局扫码事件 (原始数据)
     /// </summary>
     public class GlobalScanEvent : BaseEvent
     {
         public string Barcode { get; }
-
-        public GlobalScanEvent(string barcode)
-        {
-            Barcode = barcode;
-        }
-    }
-
-    /// <summary>
-    /// 测量值实时更新事件
-    /// </summary>
-    public class RealTimeUpdateEvent : BaseEvent
-    {
-        public string Key { get; }
-        public object Value { get; }
-
-        public RealTimeUpdateEvent(string key, object value)
-        {
-            Key = key;
-            Value = value;
-        }
+        public GlobalScanEvent(string barcode) { Barcode = barcode; }
     }
 
     /// <summary>

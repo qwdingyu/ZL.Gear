@@ -8,18 +8,18 @@ namespace ZL.Gear.Core.Models
     {
         /*
          // 检查单个命令
-        bool hasSensorCheck = testPrerequisites.Steps.ContainsCommandRecursive("AutoSbrSensorCheck");
+        bool hasSensorCheck = testPrerequisites.Steps.ContainsCommandRecursive("MeasureVoltage");
 
         // 查找所有包含特定命令的步骤
-        var sensorSteps = testPrerequisites.Steps.FindStepsByCommandRecursive("AutoSbrSensorCheck", "AutoSbrResistance");
+        var sensorSteps = testPrerequisites.Steps.FindStepsByCommandRecursive("MeasureVoltage", "MeasureCurrent");
 
         // 获取所有步骤（扁平化列表）
         var allSteps = testPrerequisites.Steps.FlattenSteps();
 
         // 检查多个不同的命令组合
         bool needsSpecialEquipment = testPrerequisites.Steps.ContainsAnyCommandRecursive(
-            "AutoSbrSensorCheck", 
-            "AutoSbrResistance", 
+            "MeasureVoltage", 
+            "MeasureCurrent", 
             "HighVoltageTest",
             "PressureTest"
         );

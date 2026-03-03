@@ -141,7 +141,7 @@ namespace ZL.Gear.Core.Models
         /// <summary>
         /// 绑定设备配置文件，将逻辑名称（如"PLC"、"MainPower"）解析为物理ID（如"plc_1"、"ktdy_1"）并填充到 TargetDict。
         /// </summary>
-        /// <param name="profile">设备配置文件 (SeatProfile)</param>
+        /// <param name="profile">设备配置文件 (DeviceProfile)</param>
         public void BindProfile(IDictionary<string, string> profile)
         {
             if (profile == null) return;

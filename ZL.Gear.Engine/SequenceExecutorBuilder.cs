@@ -296,7 +296,7 @@ namespace ZL.Gear.Engine
             List<IDisposable> resourceHolder,
             bool disposeDeviceService,
             bool disposeProfileService)
-            : base(deviceService, profileService, logger, testStepInterval)
+            : base(deviceService, profileService, null, logger, testStepInterval)
         {
             _deviceService = deviceService;
             _profileService = profileService;

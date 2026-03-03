@@ -36,7 +36,7 @@ namespace ZL.Gear.Core.Configuration
                     InfrastructurePath = Path.Combine(dir, "infrastructure.json"),
                     BarcodeRulesPath = Path.Combine(dir, "barcode_rules.json"),
                     ModelListPath = Path.Combine(dir, "ModelList.json"),
-                    SeatProfilePath = Path.Combine(dir, "SeatProfile.json"),
+                    DeviceProfilePath = Path.Combine(dir, "DeviceProfile.json"),
                 };
 
                 configs[libraryName] = config;

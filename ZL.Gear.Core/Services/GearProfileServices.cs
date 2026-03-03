@@ -26,7 +26,7 @@ namespace ZL.Gear.Core
             }
 
             var config = _libraryService.CurrentLibraryConfig;
-            var path = config.SeatProfilePath;
+            var path = config.DeviceProfilePath;
             
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {

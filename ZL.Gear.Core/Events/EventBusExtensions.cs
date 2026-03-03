@@ -11,12 +11,12 @@ namespace ZL.Gear.Core.Events
     {
         public static void PostUiTip(this IEventBus bus, string message, bool isSuccess = false)
         {
-            bus.Publish(new UiFeedbackEvent(message, isSuccess ? UiLogLevel.Success : UiLogLevel.Info));
+            bus.Publish(new UserFeedbackEvent(message, isSuccess ? FeedbackLogLevel.Success : FeedbackLogLevel.Info));
         }
 
         public static void PostRealTimeUpdate(this IEventBus bus, string key, object value)
         {
-            bus.Publish(new UiRealTimeUpdateEvent(key, value));
+            bus.Publish(new MetricUpdateEvent(key, value));
         }
 
         public static void PostScanResult(this IEventBus bus, string barcode)
