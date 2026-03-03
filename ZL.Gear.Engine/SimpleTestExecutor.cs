@@ -412,7 +412,7 @@ namespace ZL.Gear.Engine
         private async Task<StepExecutionResult> ExecuteDelayStepAsync(Dictionary<string, object> parameters, CancellationToken token)
         {
             var delayMs = 500;
-            if (parameters.TryGetValue("DelayMs", out var d)) try { delayMs = Convert.ToInt32(d); } catch { }
+            if (parameters.TryGetValue("DelayMs", out var d)) try { delayMs = Convert.ToInt32(d); } catch { /* 转换失败使用默认值 500ms */ }
             _log($"    [Delay] 延时 {delayMs}ms");
             await Task.Delay(delayMs, token);
             return new StepExecutionResult { Success = true, Message = $"延时 {delayMs}ms 完成" };
@@ -459,7 +459,7 @@ namespace ZL.Gear.Engine
             if (!_disposed)
             {
                 _disposed = true;
-                try { (_deviceService as IDisposable)?.Dispose(); _factory.Dispose(); } catch { }
+                try { (_deviceService as IDisposable)?.Dispose(); _factory.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
             }
         }
 
@@ -474,7 +474,7 @@ namespace ZL.Gear.Engine
                     else (_deviceService as IDisposable)?.Dispose();
                     await _factory.DisposeAsync().ConfigureAwait(false);
                 }
-                catch { }
+                catch { /* DisposeAsync 不应抛出异常 */ }
             }
         }
     }

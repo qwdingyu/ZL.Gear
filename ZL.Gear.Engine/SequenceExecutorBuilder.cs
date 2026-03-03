@@ -264,18 +264,18 @@ namespace ZL.Gear.Engine
 
             if (_shouldDisposeDeviceService && _deviceService is IDisposable disposableDevice)
             {
-                try { disposableDevice.Dispose(); } catch { }
+                try { disposableDevice.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
             }
 
             if (_shouldDisposeProfileService && _profileService is IDisposable disposableProfile)
             {
-                try { disposableProfile.Dispose(); } catch { }
+                try { disposableProfile.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
             }
 
             // 释放资源持有者
             foreach (var resource in _resourceHolder)
             {
-                try { resource.Dispose(); } catch { }
+                try { resource.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
             }
             _resourceHolder.Clear();
 

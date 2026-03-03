@@ -23,7 +23,7 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
 
         public LinkageMeasureHandler(Action<string> log = null)
         {
-            _log = log ?? (s => { });
+            _log = log ?? SensingLog.Default;
         }
 
         public async Task<ExecutionResultBase> ExecuteAsync(StepConfig step, StepContext context)
@@ -54,7 +54,8 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
                     if (targetType == typeof(double)) return (T)(object)Convert.ToDouble(value);
                     if (targetType == typeof(int)) return (T)(object)Convert.ToInt32(value);
                     if (targetType == typeof(bool)) return (T)(object)Convert.ToBoolean(value);
-                    return (T)Convert.ChangeType(value, targetType);
+                    try { return (T)Convert.ChangeType(value, targetType); }
+                    catch { return defaultValue; }
                 }
             }
             return defaultValue;

@@ -32,7 +32,7 @@ namespace ZL.Gear.Core.Workflow
             catch (Exception ex)
             {
                 // 这里可以注入日志记录
-                Console.WriteLine($"[Evaluator Error] Condition: {expression}, Error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Evaluator Error] Condition: {expression}, Error: {ex.Message}");
                 return false;
             }
         }
@@ -49,7 +49,7 @@ namespace ZL.Gear.Core.Workflow
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Evaluator Error] Value Expr: {expression}, Error: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[Evaluator Error] Value Expr: {expression}, Error: {ex.Message}");
                     return input;
                 }
             }

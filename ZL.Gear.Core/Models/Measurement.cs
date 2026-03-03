@@ -241,7 +241,7 @@ namespace ZL.Gear.Core.Models
             if (Metadata.TryGetValue(key, out var value))
             {
                 if (value is TValue typed) return typed;
-                try { return (TValue)Convert.ChangeType(value, typeof(TValue)); } catch { }
+                try { return (TValue)Convert.ChangeType(value, typeof(TValue)); } catch { return default; }
             }
             return default;
         }
@@ -448,6 +448,10 @@ namespace ZL.Gear.Core.Models
                     {
                         var value = Convert.ChangeType(kvp.Value, prop.PropertyType);
                         prop.SetValue(result, value);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 类型转换失败时静默跳过，不影响其他字段
                     }
                     catch { }
                 }

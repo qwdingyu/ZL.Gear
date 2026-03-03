@@ -24,6 +24,7 @@ namespace ZL.Gear.Sensing.Samplers
         private readonly Subject<ZL.Gear.Core.Models.Measurement> _output = new();
         private CancellationTokenSource _cts;
         private Task _loopTask;
+        private readonly Action<string> _log;
 
         public string Name { get; }
         public IObservable<ZL.Gear.Core.Models.Measurement> DataStream => _output.AsObservable();
@@ -34,7 +35,8 @@ namespace ZL.Gear.Sensing.Samplers
             string command, 
             Dictionary<string, object> args,
             StepContext context,
-            TimeSpan interval)
+            TimeSpan interval,
+            Action<string> logger = null)
         {
             Name = name;
             _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -42,6 +44,7 @@ namespace ZL.Gear.Sensing.Samplers
             _args = args ?? new Dictionary<string, object>();
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _interval = interval;
+            _log = logger ?? SensingLog.Default;
         }
 
         public void Start()
@@ -72,7 +75,15 @@ namespace ZL.Gear.Sensing.Samplers
                         var val = reading.Value;
                         // 尝试转换为 T
                         T typedValue = default;
-                        try { typedValue = (T)Convert.ChangeType(val, typeof(T)); } catch { }
+                        try 
+                        { 
+                            typedValue = (T)Convert.ChangeType(val, typeof(T)); 
+                        } 
+                        catch (Exception ex) 
+                        {
+                            _log($"[DeviceSampler] 类型转换失败: {val} -> {typeof(T).Name}, 错误: {ex.Message}");
+                            typedValue = default;
+                        }
                         
                         _output.OnNext(ZL.Gear.Core.Models.Measurement<T>.Create(Name, typedValue, true));
                     }
@@ -89,7 +100,16 @@ namespace ZL.Gear.Sensing.Samplers
 
                 if (_interval > TimeSpan.Zero)
                 {
-                    try { await Task.Delay(_interval, token); } catch { break; }
+                    try { await Task.Delay(_interval, token); } 
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log($"[DeviceSampler] 采样延迟异常: {ex.Message}");
+                        break;
+                    }
                 }
             }
         }

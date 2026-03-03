@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 namespace ZL.Gear.Sensing
 {
-    public class WindowStats
+    public class SensingWindowStats
     {
         public long Count { get; set; }
         public double Sum { get; set; }
         public double Min { get; set; } = double.MinValue;
         public double Max { get; set; } = double.MinValue;
-        public List<WindowSample> Samples { get; set; } = new List<WindowSample>();
+        public List<SensingWindowSample> Samples { get; set; } = new List<SensingWindowSample>();
         public long LastTicks { get; set; }  // ★ 新增：最后一个样本的时间戳
         public long FirstTicks { get; set; } // ★ 可选：第一个样本的时间戳
 
@@ -18,9 +18,9 @@ namespace ZL.Gear.Sensing
         public double Avg { get { return Count > 0 ? Math.Round(Sum / Count, DefaultPrecision) : 0.0; } }
 
         public double PkPk => Count > 0 ? Max - Min : 0;
-        public WindowStats Clone(bool includeSamples)
+        public SensingWindowStats Clone(bool includeSamples)
         {
-            var copy = new WindowStats();
+            var copy = new SensingWindowStats();
             copy.Count = this.Count;
             copy.Sum = this.Sum;
             copy.Min = this.Min;
@@ -28,7 +28,7 @@ namespace ZL.Gear.Sensing
             copy.LastTicks = this.LastTicks;
             copy.FirstTicks = this.FirstTicks;
             DefaultPrecision = this.DefaultPrecision;
-            copy.Samples = includeSamples ? new List<WindowSample>(this.Samples) : new List<WindowSample>();
+            copy.Samples = includeSamples ? new List<SensingWindowSample>(this.Samples) : new List<SensingWindowSample>();
             return copy;
         }
         public void ResetCounters()
@@ -42,11 +42,11 @@ namespace ZL.Gear.Sensing
         }
     }
 
-    public sealed class WindowState
+    public sealed class SensingWindowState
     {
         public readonly object Sync = new();
         public bool Active;
-        public List<WindowSample> AllSamples { get; } = new List<WindowSample>(); // ★ 修正：只存储原始样本列表
+        public List<SensingWindowSample> AllSamples { get; } = new List<SensingWindowSample>();
     }
 
 }

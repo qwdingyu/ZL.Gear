@@ -26,7 +26,7 @@ namespace ZL.Gear.Sensing.Orchestration
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _configModel = configModel ?? new SamplingConfigModel(); // 至少提供默认配置
-            _log = log ?? (s => { });
+            _log = log ?? SensingLog.Default;
         }
 
         public async Task<ExecutionResultBase> MeasureAsync(CancellationToken token)

@@ -140,7 +140,7 @@ namespace ZL.Gear.Core.Models
             {
                 if (kvp.Value is IDisposable disposable)
                 {
-                    try { disposable.Dispose(); } catch { }
+                    try { disposable.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
                 }
             }
             store._store.Clear();

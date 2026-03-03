@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using ZL.Gear.Sensing.Dto;
 
 namespace ZL.Gear.Sensing
@@ -41,7 +42,7 @@ namespace ZL.Gear.Sensing
         /// <param name="stepName">当前测试步骤的名称，用于日志记录。</param>
         public void ValidateAndLogConfiguration(string stepName)
         {
-            var logger = Logger ?? Console.WriteLine; 
+            var logger = Logger ?? SensingLog.Default;
             var logBuilder = new System.Text.StringBuilder();
 
             logBuilder.AppendLine($"--- [{stepName}] 配置审查与生效参数 ---");

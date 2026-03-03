@@ -18,7 +18,7 @@ namespace ZL.Gear.Sensing.Orchestration
 
         public DefaultMeasurementEngine(Action<string> log = null)
         {
-            _log = log ?? (s => { });
+            _log = log ?? SensingLog.Default;
         }
 
         public async Task<ExeResult<T>> ExecuteAsync(

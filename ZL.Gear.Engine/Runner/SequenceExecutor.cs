@@ -236,7 +236,7 @@ namespace ZL.Gear.Engine.Runner
                 activeLeases.ForEach(l => l.Dispose());
                 _log("设备已归还。");
 
-                try { await timerTask; } catch { }
+                try { await timerTask; } catch { /* 忽略取消或超时，确保清理完成 */ }
             }
             // 5. 结果处理阶段 (在所有执行和清理之后)
             // ★ 修正点：使用 _totalSw 的时间，并设置 EndTime

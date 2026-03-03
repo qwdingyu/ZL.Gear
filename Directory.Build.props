@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <!-- 统一版本管理 -->
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Company>ZL.Gear</Company>
+    <Product>ZL.Gear 工业自动化测试框架</Product>
+    <Description>ZL.Gear 工业自动化微编排框架 - 洋葱架构</Description>
+    <Copyright>Copyright © 2024</Copyright>
+    
+    <!-- 编译选项 -->
+    <LangVersion>11.0</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+</Project>
