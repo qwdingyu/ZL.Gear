@@ -5,8 +5,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ZL.Gear.Core;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Devices.Abstractions;
+using ZL.Gear.Core.Configuration;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
@@ -46,8 +48,11 @@ namespace ZL.Gear.Engine
         private int _testStepInterval = 100;
         private bool _disposeDeviceService = true;
         private bool _disposeProfileService = true;
+        private string? _projectRoot;
+        private string? _defaultLibrary;
         private IDeviceService? _customDeviceService;
         private IGearProfileService? _customProfileService;
+        private ILibraryService? _customLibraryService;
         private Action<IServiceCollection>? _customServicesConfig;
         private List<IDisposable> _resourceHolder = new();
 
@@ -65,6 +70,16 @@ namespace ZL.Gear.Engine
         public SequenceExecutorBuilder WithDeviceConfig(string path)
         {
             _deviceConfigPath = path;
+            return this;
+        }
+
+        /// <summary>
+        /// 设置项目根目录（用于加载项目库配置）
+        /// </summary>
+        public SequenceExecutorBuilder WithProjectRoot(string root, string defaultLibrary = null)
+        {
+            _projectRoot = root;
+            _defaultLibrary = defaultLibrary;
             return this;
         }
 
@@ -123,21 +138,31 @@ namespace ZL.Gear.Engine
         {
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
 
-            // 1. 加载设备配置（如果指定了路径）
-            if (!string.IsNullOrEmpty(_deviceConfigPath) && File.Exists(_deviceConfigPath))
+            // 1. 初始化项目库服务 (核心上下文)
+            var libraryService = _customLibraryService ?? CreateDefaultLibraryService();
+
+            // 2. 加载设备配置
+            // 优先级：手动指定路径 > 当前库配置路径
+            string? targetDeviceConfig = _deviceConfigPath;
+            if (string.IsNullOrEmpty(targetDeviceConfig))
             {
-                _logger?.Invoke($"[SequenceExecutorBuilder] 加载设备配置: {_deviceConfigPath}");
-                UnifiedDeviceLoader.Load(_deviceConfigPath);
+                try { targetDeviceConfig = libraryService.CurrentLibraryConfig?.DevicesPath; } catch { }
             }
 
-            // 2. 创建或使用自定义的 IDeviceService
+            if (!string.IsNullOrEmpty(targetDeviceConfig) && File.Exists(targetDeviceConfig))
+            {
+                _logger?.Invoke($"[SequenceExecutorBuilder] 加载设备配置: {targetDeviceConfig}");
+                UnifiedDeviceLoader.Load(targetDeviceConfig);
+            }
+
+            // 3. 创建或使用自定义的 IDeviceService
             var deviceService = _customDeviceService ?? CreateDefaultDeviceService();
 
-            // 3. 创建或使用自定义的 IGearProfileService
-            var profileService = _customProfileService ?? CreateDefaultProfileService();
+            // 4. 创建或使用自定义的 IGearProfileService
+            var profileService = _customProfileService ?? CreateDefaultProfileService(libraryService);
 
-            // 4. 初始化工作流服务
-            InitializeWorkflowServices();
+            // 5. 初始化工作流服务
+            InitializeWorkflowServices(libraryService);
 
             // 5. 创建日志器
             var logger = CreateLogger();
@@ -184,13 +209,32 @@ namespace ZL.Gear.Engine
             return deviceService;
         }
 
-        private IGearProfileService CreateDefaultProfileService()
+        private ILibraryService CreateDefaultLibraryService()
         {
-            _logger?.Invoke("[SequenceExecutorBuilder] 加载设备角色配置...");
-            return new SimpleGearProfileService();
+            var service = new LibraryService();
+            if (!string.IsNullOrEmpty(_projectRoot))
+            {
+                _logger?.Invoke($"[SequenceExecutorBuilder] 初始化项目库服务: {_projectRoot}");
+                service.Initialize(_projectRoot, _defaultLibrary);
+            }
+            return service;
         }
 
-        private void InitializeWorkflowServices()
+        private IGearProfileService CreateDefaultProfileService(ILibraryService libraryService)
+        {
+            _logger?.Invoke("[SequenceExecutorBuilder] 加载设备角色配置...");
+            try
+            {
+                // 优先尝试使用标准实现
+                return new GearProfileServices(libraryService);
+            }
+            catch
+            {
+                return new SimpleGearProfileService();
+            }
+        }
+
+        private void InitializeWorkflowServices(ILibraryService libraryService)
         {
             _logger?.Invoke("[SequenceExecutorBuilder] 初始化工作流服务...");
 
@@ -198,6 +242,10 @@ namespace ZL.Gear.Engine
 
             // 注册日志委托
             services.AddSingleton(_logger ?? (_ => { }));
+
+            // 注册项目库服务
+            services.AddSingleton(libraryService);
+            services.AddSingleton<IStepCatalogService, StepCatalogService>();
 
             // 注册工作流评估器
             services.AddSingleton<IWorkflowEvaluator, SimpleWorkflowEvaluator>();

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ZL.Gear.Core.Devices
 {
@@ -13,6 +15,10 @@ namespace ZL.Gear.Core.Devices
         public bool Enabled { get; set; } = true;
         public TransportConfig Transport { get; set; }
         public ProtocolConfigRef Protocol { get; set; }
+        /// <summary>
+        /// 允许在设备层级直接定义简单的 SCPI 命令
+        /// </summary>
+        public Dictionary<string, CommandConfig> Commands { get; set; }
         public Dictionary<string, object> Extra { get; set; }
     }
 
@@ -45,8 +51,22 @@ namespace ZL.Gear.Core.Devices
     /// </summary>
     public class CommandConfig
     {
-        public string Template { get; set; }
+        private string _template;
+
+        /// <summary>
+        /// 指令字符串（支持 ${arg} 占位符）。
+        /// 在 JSON 中推荐使用 "Cmd"，但也支持旧的 "Template" 字段。
+        /// </summary>
+        [JsonProperty("Cmd")]
+        public string Cmd { get => _template; set => _template = value; }
+
+        [JsonProperty("Template")]
+        public string Template { get => _template; set => _template = value; }
+
         public int WaitAfterMs { get; set; }
+
+        public bool ExpectResponse { get; set; }
+
         public ResponseParserConfig Parser { get; set; }
     }
 

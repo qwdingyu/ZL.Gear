@@ -5,7 +5,7 @@ using ZL.Gear.Core.Utils;
 namespace ZL.Gear.Core.Configuration
 {
     /// <summary>
-    /// 负责缓存库的流程和模型配置，替代原 ProjectLibraryManager 的缓存功能。
+    /// 负责缓存库的流程和模型配置。
     /// </summary>
     public class LibraryCacheService
     {

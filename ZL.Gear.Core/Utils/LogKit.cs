@@ -137,5 +137,10 @@ namespace ZL.Gear.Core.Utils
         {
             WriteLogs(message, LogLevel.Error, customPrefix);
         }
+
+        public static void Warn(string message, string customPrefix = null)
+        {
+            WriteLogs(message, LogLevel.Warn, customPrefix);
+        }
     }
 }

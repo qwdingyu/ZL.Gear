@@ -10,26 +10,40 @@ namespace ZL.Gear.Core
 {
     public class GearProfileServices : IGearProfileService
     {
-        private static readonly Lazy<GearProfileServices> _instance = new Lazy<GearProfileServices>(() => new GearProfileServices());
-        public static GearProfileServices Instance => _instance.Value;
-
-        private LibraryConfig libraryConfig;
+        private readonly ILibraryService _libraryService;
         
-        public GearProfileServices()
+        public GearProfileServices(ILibraryService libraryService)
         {
-            libraryConfig = ProjectLibraryManager.GetCurrentLibraryConfig();
+            _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
         }
 
         public Dictionary<string, object> LoadDeviceRoles()
         {
-            var path = libraryConfig.SeatProfilePath;
-            if (!File.Exists(path))
+            if (!_libraryService.IsInitialized)
             {
-                LogKit.Info($"设备配置文件【{path}】不存在！");
+                LogKit.Info("当前库未初始化，跳过加载设备角色配置。");
                 return new Dictionary<string, object>();
             }
-            return JsonConvert.DeserializeObject<Dictionary<string, object>>(File.ReadAllText(path));
+
+            var config = _libraryService.CurrentLibraryConfig;
+            var path = config.SeatProfilePath;
+            
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                LogKit.Info($"设备角色配置文件【{path}】不存在。");
+                return new Dictionary<string, object>();
+            }
+            
+            try
+            {
+                var json = File.ReadAllText(path);
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(json) ?? new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                LogKit.Error($"解析设备角色配置文件失败: {ex.Message}");
+                return new Dictionary<string, object>();
+            }
         }
     }
 }
-
