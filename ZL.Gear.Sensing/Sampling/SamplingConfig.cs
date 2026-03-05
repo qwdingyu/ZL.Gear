@@ -33,6 +33,8 @@ namespace ZL.Gear.Sensing
             Trigger = new ImmediateTrigger<T>();
             SampleIntervalMs = DEFAULT_INTERVAL_MS;
             TotalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS;
+            // 默认使用 FixedCountStrategy(10) - 采集10个样本后完成
+            Strategy = new FixedCountStrategy<T>(10);
         }
 
         /// <summary>

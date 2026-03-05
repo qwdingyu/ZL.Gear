@@ -17,7 +17,7 @@ namespace ZL.Gear.Core.Events
         
         public static void Notify(string deviceId, DeviceState state, string message = "")
         {
-            var bus = _bus ?? GlobalEvents.Bus;
+            var bus = _bus;
             bus.Publish(new DeviceStatusEvent(deviceId, state, message));
         }
     }

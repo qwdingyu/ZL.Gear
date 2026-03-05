@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using NLog;
 using ZL.Gear.Sensing.Abstractions;
 using ZL.Gear.Sensing.Dto;
 
@@ -14,19 +15,45 @@ namespace ZL.Gear.Sensing.Orchestration
     /// </summary>
     public class DefaultMeasurementEngine<T> : IMeasurementEngine<T> where T : IComparable<T>
     {
-        private readonly Action<string> _log;
+        private readonly NLog.Logger _logger;
+        private readonly Action<string> _legacyLog;
 
-        public DefaultMeasurementEngine(Action<string> log = null)
+        /// <summary>
+        /// 使用 NLog Logger 构造。
+        /// </summary>
+        public DefaultMeasurementEngine(NLog.Logger logger = null)
         {
-            _log = log ?? SensingLog.Default;
+            _logger = logger ?? LogManager.GetCurrentClassLogger();
+            _legacyLog = null;
+        }
+
+        /// <summary>
+        /// 使用 Action<string> 回调构造（兼容旧版）。
+        /// </summary>
+        public DefaultMeasurementEngine(Action<string> log)
+        {
+            _legacyLog = log ?? SensingLog.Default;
+            _logger = null;
+        }
+
+        private void Log(string message)
+        {
+            if (_logger != null)
+            {
+                _logger.Info(message);
+            }
+            else
+            {
+                _legacyLog?.Invoke(message);
+            }
         }
 
         public async Task<ExeResult<T>> ExecuteAsync(
-            IObservable<T> dataStream, 
-            SamplingConfig<T> config, 
+            IObservable<T> dataStream,
+            SamplingConfig<T> config,
             CancellationToken token)
         {
-            _log($"[Engine] 测量开始, 总超时: {config.TotalTimeoutMs}ms");
+            Log($"[Engine] 测量开始, 总超时: {config.TotalTimeoutMs}ms");
 
             var samples = new List<T>();
             var tcs = new TaskCompletionSource<ExeResult<T>>();
@@ -49,7 +76,7 @@ namespace ZL.Gear.Sensing.Orchestration
                                 if (config.Trigger.ShouldStart(sample, false))
                                 {
                                     isTriggered = true;
-                                    _log($"[Engine] 采集激活, 触发值: {sample}");
+                                    Log($"[Engine] 采集激活, 触发值: {sample}");
                                     config.OnTestStarted?.Invoke(sample);
                                 }
                                 else return;
@@ -99,7 +126,7 @@ namespace ZL.Gear.Sensing.Orchestration
                     : ExeStatus.Cancelled;
                 
                 string msg = status == ExeStatus.TimedOut ? "测量判定超时" : "操作取消";
-                _log($"[Engine] {msg}");
+                Log($"[Engine] {msg}");
                 
                 // 超时或取消也计算当前已有样本的结果（由 ExeResult 约定）
                 return BuildResult(samples, config, msg, status);

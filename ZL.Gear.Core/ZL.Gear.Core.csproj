@@ -11,9 +11,11 @@
     <PackageReference Include="DynamicExpresso.Core" Version="2.16.1" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+      Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="NLog" Version="6.0.7" />
+    <PackageReference Include="NLog" Version="6.0.0" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
   </ItemGroup>
 </Project>

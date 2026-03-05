@@ -18,6 +18,11 @@ namespace ZL.Gear.Core.Devices.Abstractions
         Task<IDeviceLease<TDevice>> LeaseAsync<TDevice>(string deviceKey, CancellationToken token = default)
             where TDevice : class, IDevice;
         Task InitializeAllDevicesAsync(int maxParallelism = 4, CancellationToken token = default);
+        
+        /// <summary>
+        /// 紧急停止 - 复位所有支持复位的设备
+        /// </summary>
+        Task EmergencyStopAsync(CancellationToken token = default);
 
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
@@ -8,10 +9,18 @@ using System.Net;
 
 namespace ZL.Gear.Core.Utils
 {
+    /// <summary>
+    /// 日志工具类，支持 NLog 和 Microsoft.Extensions.Logging 双模式。
+    /// </summary>
     public class LogKit
     {
         static IPEndPoint remoteIP = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9999);
         private static string SelfAppName;
+        
+        // Microsoft.Extensions.Logging 兼容层
+        private static Microsoft.Extensions.Logging.ILogger _fallbackLogger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("LogKit");
+        private static bool _useFallbackLogger = false;
+        
         private static readonly Lazy<Logger> _loggerInstance = new Lazy<Logger>(() =>
         {
             string configFile = Path.Combine(Environment.CurrentDirectory, "NLog.config");
@@ -29,6 +38,26 @@ namespace ZL.Gear.Core.Utils
         });
 
         private static Logger LoggerInstance => _loggerInstance.Value;
+        
+        /// <summary>
+        /// 设置 Microsoft.Extensions.Logging 兼容层。
+        /// 调用此方法后，所有 LogKit 调用将转发到指定的 ILogger。
+        /// </summary>
+        /// <param name="logger">ILogger 实例。</param>
+        public static void SetLogger(Microsoft.Extensions.Logging.ILogger logger)
+        {
+            _fallbackLogger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("LogKit");
+            _useFallbackLogger = true;
+        }
+        
+        /// <summary>
+        /// 重置为使用 NLog 原生实现。
+        /// </summary>
+        public static void ResetToNLog()
+        {
+            _useFallbackLogger = false;
+            _fallbackLogger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("LogKit");
+        }
 
 
         static LogKit()
@@ -85,7 +114,7 @@ namespace ZL.Gear.Core.Utils
 
 
         //决定日志文件的名称，如果提供了自定义前缀，则使用前缀和日志级别
-        private static string DetermineLogFileName(LogLevel logLevel, string customPrefix = null)
+        private static string DetermineLogFileName(NLog.LogLevel logLevel, string customPrefix = null)
         {
             return string.IsNullOrEmpty(customPrefix) ? $"{SelfAppName}_{logLevel}" : $"{SelfAppName}_{customPrefix}_{logLevel}";
         }
@@ -103,44 +132,111 @@ namespace ZL.Gear.Core.Utils
         /// <param name="customPrefix"></param>
         public static void WriteLogs(string message, string customPrefix = null)
         {
-            LogLevel logLevel = LogLevel.Info;
-            WriteLogs(message, logLevel, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogInformation(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                NLog.LogLevel logLevel = NLog.LogLevel.Info;
+                WriteLogs(message, logLevel, customPrefix);
+            }
         }
+        
         public static void WriteAndTrace(string message, string customPrefix = null)
         {
-            LogLevel logLevel = LogLevel.Info;
-            WriteLogs(message, logLevel, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogInformation(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                NLog.LogLevel logLevel = NLog.LogLevel.Info;
+                WriteLogs(message, logLevel, customPrefix);
+            }
             //TraceKit.SendMsg(remoteIP, message);
         }
 
-        public static void WriteLogs(string message, LogLevel logLevel, string customPrefix = null)
+        public static void WriteLogs(string message, NLog.LogLevel logLevel, string customPrefix = null)
         {
-            var logFileName = DetermineLogFileName(logLevel, customPrefix);
-            var logEvent = new LogEventInfo(logLevel, "", message)
+            if (_useFallbackLogger)
             {
-                Properties = { ["LogFileName"] = logFileName }
-            };
-            LoggerInstance.Log(logEvent);
+                var msLogLevel = ConvertLogLevel(logLevel);
+                _fallbackLogger.Log(msLogLevel, "{Message}", message);
+            }
+            else
+            {
+                var logFileName = DetermineLogFileName(logLevel, customPrefix);
+                var logEvent = new LogEventInfo(logLevel, "", message)
+                {
+                    Properties = { ["LogFileName"] = logFileName }
+                };
+                LoggerInstance.Log(logEvent);
+            }
         }
 
         public static void Info(string message, string customPrefix = null)
         {
-            WriteLogs(message, LogLevel.Info, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogInformation(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                WriteLogs(message, NLog.LogLevel.Info, customPrefix);
+            }
         }
 
         public static void Debug(string message, string customPrefix = null)
         {
-            WriteLogs(message, LogLevel.Debug, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogDebug(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                WriteLogs(message, NLog.LogLevel.Debug, customPrefix);
+            }
         }
 
         public static void Error(string message, string customPrefix = null)
         {
-            WriteLogs(message, LogLevel.Error, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogError(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                WriteLogs(message, NLog.LogLevel.Error, customPrefix);
+            }
         }
 
         public static void Warn(string message, string customPrefix = null)
         {
-            WriteLogs(message, LogLevel.Warn, customPrefix);
+            if (_useFallbackLogger)
+            {
+                _fallbackLogger.LogWarning(customPrefix != null ? "[{Prefix}] {Message}" : "{Message}", customPrefix, message);
+            }
+            else
+            {
+                WriteLogs(message, NLog.LogLevel.Warn, customPrefix);
+            }
+        }
+        
+        /// <summary>
+        /// 转换 NLog LogLevel 到 Microsoft.Extensions.Logging LogLevel
+        /// </summary>
+        private static Microsoft.Extensions.Logging.LogLevel ConvertLogLevel(NLog.LogLevel nlogLevel)
+        {
+            if (nlogLevel == NLog.LogLevel.Trace || nlogLevel == NLog.LogLevel.Debug)
+                return Microsoft.Extensions.Logging.LogLevel.Debug;
+            if (nlogLevel == NLog.LogLevel.Info)
+                return Microsoft.Extensions.Logging.LogLevel.Information;
+            if (nlogLevel == NLog.LogLevel.Warn)
+                return Microsoft.Extensions.Logging.LogLevel.Warning;
+            if (nlogLevel == NLog.LogLevel.Error || nlogLevel == NLog.LogLevel.Fatal)
+                return Microsoft.Extensions.Logging.LogLevel.Error;
+            return Microsoft.Extensions.Logging.LogLevel.Information;
         }
     }
 }
