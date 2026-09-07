@@ -41,6 +41,12 @@ namespace ZL.Gear.Engine.Runner
                 parameters["DurationMs"] = timeoutMs > 500 ? timeoutMs - 500 : 0;
             }
 
+            // 桥接 EvaluateResult：若步骤未显式设置，且参数中明确提供，则回填
+            if (!step.EvaluateResult.HasValue && parameters.TryGetValue("EvaluateResult", out object evalObj) && evalObj is bool evalBool)
+            {
+                step.EvaluateResult = evalBool;
+            }
+
             // 如果是新格式，则无需转换
             if (step.ExpectedResults != null && step.ExpectedResults.Any())
             {

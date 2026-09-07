@@ -366,7 +366,7 @@ namespace ZL.Gear.Engine.Runner
                             stepResult.StepMeasurements.Add(measurement);
                         }
                     }
-                    //为了兼容老的代码，诸如 条码比对action已经检测过了，在此就不做结果评价了
+                    // 由 StepConfig.EvaluateResult / StepHandlerCommandAttribute.EvaluateResult 控制是否跳过结果评估
                                         if (stepConfig.EvaluateResult == false)
                     {
                         stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
