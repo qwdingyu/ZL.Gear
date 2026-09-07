@@ -57,6 +57,11 @@ namespace ZL.Gear.Engine.Runner
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StepHandlerCommandAttribute> _handlerMetadata = new();
 
         /// <summary>
+        /// 命令 -> 参数 schema 描述缓存（用于启动期校验与文档生成）。
+        /// </summary>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _parameterSchemas = new();
+
+        /// <summary>
         /// 兼容旧代码的构造函数。
         /// 使用默认的 <see cref="RegistryStepHandlerLookup"/> 和 <see cref="DefaultStepHandlerFactory"/>，
         /// 并自动注册所有内置 Handler。
@@ -207,6 +212,16 @@ namespace ZL.Gear.Engine.Runner
             if (attr != null)
             {
                 _handlerMetadata[command] = attr;
+
+                // 启动期冲突校验：同名命令参数 schema 不一致
+                if (!string.IsNullOrEmpty(attr.ParameterSchema))
+                {
+                    if (_parameterSchemas.TryGetValue(command, out var existingSchema) && existingSchema != attr.ParameterSchema)
+                    {
+                        throw new InvalidOperationException($"命令 '{command}' 存在多个不一致的参数 schema 定义: '{existingSchema}' vs '{attr.ParameterSchema}'");
+                    }
+                    _parameterSchemas[command] = attr.ParameterSchema;
+                }
             }
         }
 

@@ -55,6 +55,12 @@ namespace ZL.Gear.Core.Infrastructure
         public string Description { get; set; }
 
         /// <summary>
+        /// 参数 schema 描述，用于文档生成、IDE 提示或启动期参数校验。
+        /// 约定格式示例："LoadN:int(500) 施加载荷(N); HoldMs:int(3000) 保持时长(ms)"
+        /// </summary>
+        public string ParameterSchema { get; set; }
+
+        /// <summary>
         /// 创建步骤处理器命令特性。
         /// </summary>
         /// <param name="command">命令名称</param>
