@@ -19,23 +19,45 @@ namespace ZL.Gear.Engine.Runner.Middlewares
     {
         private static readonly ConcurrentDictionary<string, List<double>> _stats = new();
         private readonly Action<string> _log;
+        private readonly IMetrics _metrics;
+        private readonly IActivity _activity;
 
-        public DiagnosticsMiddleware(Action<string> log)
+        public DiagnosticsMiddleware(Action<string> log, IMetrics metrics = null, IActivity activity = null)
         {
             _log = log;
+            _metrics = metrics;
+            _activity = activity;
         }
 
         public async Task<ExecutionResult<List<Measurement>>> InvokeAsync(
-            StepConfig step, 
-            StepContext context, 
+            StepConfig step,
+            StepContext context,
             Func<StepConfig, StepContext, Task<ExecutionResult<List<Measurement>>>> next)
         {
+            var activityTags = new (string Key, string Value)[]
+            {
+                ("step", step.StepName ?? string.Empty),
+                ("command", step.Command ?? string.Empty)
+            };
+
+            using var activityScope = _activity?.StartActivity("step.execute", activityTags);
             var sw = Stopwatch.StartNew();
-            var result = await next(step, context);
+            ExecutionResult<List<Measurement>> result;
+            try
+            {
+                result = await next(step, context);
+            }
+            catch (Exception ex)
+            {
+                _metrics?.Record("step.errors", 1, ("command", step.Command ?? "Unknown"));
+                throw;
+            }
             sw.Stop();
 
             var duration = sw.Elapsed.TotalMilliseconds;
             RecordStat(step.Command ?? "Unknown", duration);
+            _metrics?.Record("step.duration", duration, ("command", step.Command ?? "Unknown"));
+            _metrics?.Record("step.success", result.Success ? 1 : 0, ("command", step.Command ?? "Unknown"));
 
             // 如果单步执行时间过长，记录诊断警报
             if (duration > 1000 && step.Command != "WaitUntil" && step.Command != "PlcDelay")

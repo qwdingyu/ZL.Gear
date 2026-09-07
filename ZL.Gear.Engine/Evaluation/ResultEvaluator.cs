@@ -11,12 +11,21 @@ namespace ZL.Gear.Engine.Evaluation
     /// <summary>
     /// 通用结果评估器 (Industrial & ATE Ready)
     /// </summary>
-    public static class ResultEvaluator
+    public class ResultEvaluator : IResultEvaluator
     {
+        /// <summary>
+        /// 默认评估器单例。
+        /// </summary>
+        public static ResultEvaluator Instance { get; } = new ResultEvaluator();
+
+        private ResultEvaluator()
+        {
+        }
+
         /// <summary>
         /// 主评估入口
         /// </summary>
-        public static EvaluationResult Evaluate(StepRunResult stepResult, StepConfig config)
+        EvaluationResult IResultEvaluator.Evaluate(StepRunResult stepResult, StepConfig config)
         {
             if (stepResult == null) throw new ArgumentNullException(nameof(stepResult));
             if (config == null) throw new ArgumentNullException(nameof(config));
@@ -58,6 +67,14 @@ namespace ZL.Gear.Engine.Evaluation
 
             // 3. 执行核心比对逻辑
             return EvaluateSpecs(stepResult, config);
+        }
+
+        /// <summary>
+        /// 兼容旧静态调用
+        /// </summary>
+        public static EvaluationResult Evaluate(StepRunResult stepResult, StepConfig config)
+        {
+            return ((IResultEvaluator)Instance).Evaluate(stepResult, config);
         }
 
         /// <summary>

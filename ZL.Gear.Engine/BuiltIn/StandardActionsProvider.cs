@@ -57,15 +57,27 @@ namespace ZL.Gear.Engine
 
                 var device = ctx.GetDevice<IDevice>(targetId);
                 var commandName = ctx.Get<string>("Command") ?? "Query";
-                
+
                 var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
                 return result.Success ? ExecutionResult<object>.Succeeded(result.Value, result.SamplesCollected, result.Message) : ExecutionResult.Failed(result.Message);
+            });
+
+            registry.RegisterMeasurement("Query", async (step, ctx) =>
+            {
+                var targetId = step.Target;
+                if (string.IsNullOrEmpty(targetId)) return Measurement.Create(step.MeasurementKey, null, false, "Query 测量缺少 Target 设备");
+
+                var device = ctx.GetDevice<IDevice>(targetId);
+                var commandName = ctx.Get<string>("Command") ?? "Query";
+
+                var result = await device.ExecuteAsync(commandName, step.Parameters, ctx);
+                return Measurement.Create(step.MeasurementKey, result.Value, result.Success, result.Message);
             });
 
             registry.RegisterMeasurement("Read", async (step, ctx) =>
             {
                 var targetId = step.Target;
-                if (string.IsNullOrEmpty(targetId)) return Measurement.Create(step.StepName, null, false, "Read 测量缺少 Target 设备");
+                if (string.IsNullOrEmpty(targetId)) return Measurement.Create(step.MeasurementKey, null, false, "Read 测量缺少 Target 设备");
 
                 var device = ctx.GetDevice<IDevice>(targetId);
                 var commandName = ctx.Get<string>("Command") ?? "Read";

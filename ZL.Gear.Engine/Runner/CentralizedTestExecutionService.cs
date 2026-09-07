@@ -79,7 +79,9 @@ namespace ZL.Gear.Engine.Runner
             _executor = new SequenceExecutor(
                 _deviceService,
                 _profileService,
+                null,
                 logger,
+                ResultEvaluator.Instance,
                 _testStepInterval);
 
             _log("[服务启动] 正在初始化所有设备...");

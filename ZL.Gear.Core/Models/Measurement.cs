@@ -83,8 +83,9 @@ namespace ZL.Gear.Core.Models
 
         /// <summary>
         /// 测量值的强类型访问器
+        /// 返回可序列化的类型名称，避免 System.Type 无法被部分 JSON 序列化器处理。
         /// </summary>
-        public Type? ValueType => Value?.GetType();
+        public string ValueType => Value?.GetType().FullName ?? string.Empty;
 
         #endregion
 

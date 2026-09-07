@@ -48,6 +48,13 @@ namespace ZL.Gear.Core.Models
         public string Command { get; set; }
 
         /// <summary>
+        /// 获取或设置一个值，指示该步骤的结果是否已由 Handler 自行判定。
+        /// 如果为 true，SequenceExecutor 将跳过 ResultEvaluator，直接采用 Handler 的 Success/Failure 作为最终结果。
+        /// 默认值为 null，表示使用全局默认策略。
+        /// </summary>
+        public bool? EvaluateResult { get; set; }
+
+        /// <summary>
         /// 额外依赖的设备
         /// </summary>
         public List<string> AdditionalTargets { get; set; } = new List<string>();

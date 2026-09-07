@@ -9,11 +9,13 @@ using ZL.Gear.Core;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Configuration;
+using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Drivers.Core;
+using ZL.Gear.Engine.Evaluation;
 using ZL.Gear.Engine.Runner;
 
 namespace ZL.Gear.Engine
@@ -54,7 +56,15 @@ namespace ZL.Gear.Engine
         private IGearProfileService? _customProfileService;
         private ILibraryService? _customLibraryService;
         private Action<IServiceCollection>? _customServicesConfig;
+        private ExecutionScenario _scenario = ExecutionScenario.Production;
         private List<IDisposable> _resourceHolder = new();
+        private IResultEvaluator _resultEvaluator;
+
+        public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
+        {
+            _resultEvaluator = resultEvaluator;
+            return this;
+        }
 
         private SequenceExecutorBuilder() { }
 
@@ -132,6 +142,16 @@ namespace ZL.Gear.Engine
         }
 
         /// <summary>
+        /// 设置执行场景，影响中间件管道组合
+        /// </summary>
+        /// <param name="scenario">执行场景</param>
+        public SequenceExecutorBuilder WithScenario(ExecutionScenario scenario)
+        {
+            _scenario = scenario;
+            return this;
+        }
+
+        /// <summary>
         /// 构建 SequenceExecutor 实例
         /// </summary>
         public SequenceExecutor Build()
@@ -179,7 +199,8 @@ namespace ZL.Gear.Engine
                 _testStepInterval,
                 _resourceHolder,
                 _disposeDeviceService && _customDeviceService == null,
-                _disposeProfileService && _customProfileService == null);
+                _disposeProfileService && _customProfileService == null,
+                _resultEvaluator ?? ResultEvaluator.Instance);
         }
 
         /// <summary>
@@ -256,12 +277,30 @@ namespace ZL.Gear.Engine
             services.AddSingleton<IActionRegistry>(sp => sp.GetRequiredService<SimpleActionRegistry>());
             services.AddSingleton<IActionResolver>(sp => sp.GetRequiredService<SimpleActionRegistry>());
 
+            // 注册场景化管道提供器
+            services.AddSingleton<IScenarioPipelineProvider>(sp =>
+            {
+                var handlerFactory = new DefaultStepHandlerFactory();
+                return new DefaultScenarioPipelineProvider(handlerFactory);
+            });
+
             // 注册 StepDispatcher
+            // 关键点：RegistryStepHandlerLookup 现在通过 DefaultStepHandlerProvider 外部化模板/回退策略
+            // 这样即使后续替换 DSL 引擎或回退逻辑，也不影响 StepDispatcher 构造函数签名
             services.AddSingleton(sp =>
             {
                 var actionRegistry = sp.GetRequiredService<IActionRegistry>();
                 var log = sp.GetRequiredService<Action<string>>();
-                return new StepDispatcher(actionRegistry, log);
+                var pipelineProvider = sp.GetRequiredService<IScenarioPipelineProvider>();
+                var pipeline = pipelineProvider.GetPipeline(_scenario, log);
+                return new StepDispatcher(
+                    new RegistryStepHandlerLookup(
+                        new DefaultStepHandlerFactory(),
+                        new DefaultStepHandlerProvider()),
+                    new DefaultStepHandlerFactory(),
+                    actionRegistry,
+                    pipeline,
+                    log);
             });
 
             // 自定义服务配置（如果指定）
@@ -296,8 +335,9 @@ namespace ZL.Gear.Engine
             int testStepInterval,
             List<IDisposable> resourceHolder,
             bool disposeDeviceService,
-            bool disposeProfileService)
-            : base(deviceService, profileService, null, logger, testStepInterval)
+            bool disposeProfileService,
+            IResultEvaluator resultEvaluator)
+            : base(deviceService, profileService, null, logger, resultEvaluator, testStepInterval)
         {
             _deviceService = deviceService;
             _profileService = profileService;

@@ -86,8 +86,8 @@ namespace ZL.Gear.Engine
             {
                 try
                 {
-                    // 兼容 JObject 或 string
-                    string json = defObj is string s ? s : defObj.ToString();
+                    // 兼容 string、JObject 或 Dictionary/object
+                    string json = defObj is string s ? s : JsonConvert.SerializeObject(defObj);
                     flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
                 }
                 catch (Exception ex)

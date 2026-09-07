@@ -41,6 +41,11 @@ namespace ZL.Gear.Engine.Runner
         /// 事件总线实例
         /// </summary>
         private readonly IEventBus _eventBus;
+        /// <summary>
+        /// 结果评估器，用于自定义评估逻辑。
+        /// 如果为 null，则使用默认的 <see cref="ResultEvaluator"/>。
+        /// </summary>
+        private readonly IResultEvaluator _resultEvaluator;
 
         /// <summary>
         /// 局部设备角色映射表（Site-Specific Roles）
@@ -61,19 +66,21 @@ namespace ZL.Gear.Engine.Runner
         /// 构造函数，通过依赖注入接收其所有依赖项。
         /// </summary>
         public SequenceExecutor(
-            IDeviceService deviceService, 
+            IDeviceService deviceService,
             IGearProfileService profileService,
             IEventBus eventBus,
-            ILogger<SequenceExecutor> logger, 
+            ILogger<SequenceExecutor> logger,
+            IResultEvaluator resultEvaluator = null,
             int testStepInterval = 500)
         {
             _deviceService = deviceService ?? throw new ArgumentNullException(nameof(deviceService));
             _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
             _eventBus = eventBus ?? Core.Infrastructure.DefaultEventBus.Instance; // 兼容缺省注入
             _logger = logger;
+            _resultEvaluator = resultEvaluator;
             _testStepInterval = testStepInterval;
             var roles = _profileService.LoadDeviceRoles();
-            deviceRoles = roles != null 
+            deviceRoles = roles != null
                 ? new System.Collections.Concurrent.ConcurrentDictionary<string, object>(roles)
                 : new System.Collections.Concurrent.ConcurrentDictionary<string, object>();
         }
@@ -81,6 +88,20 @@ namespace ZL.Gear.Engine.Runner
         private void Log(string message)
         {
             _logger?.LogInformation(message);
+        }
+
+        /// <summary>
+        /// 尝试对指定步骤执行 Handler 健康检查。
+        /// 通过 <see cref="WorkflowGlobal.Services"/> 解析 <see cref="StepDispatcher"/> 并执行检查。
+        /// </summary>
+        /// <param name="step">当前步骤配置。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>健康检查结果；若无法解析 <see cref="StepDispatcher"/> 则返回 null。</returns>
+        public async Task<HealthCheckResult?> TryCheckStepHealthAsync(StepConfig step, CancellationToken cancellationToken = default)
+        {
+            var dispatcher = WorkflowGlobal.Services.GetService(typeof(StepDispatcher)) as StepDispatcher;
+            if (dispatcher == null) return null;
+            return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
         }
 
         // 创建一个私有的、并行的计时器循环方法
@@ -138,9 +159,9 @@ namespace ZL.Gear.Engine.Runner
             // 启动后台计时器任务，但「不要 await」它，让它在后台运行
             var timerTask = RunTimerLoopAsync(cancellationToken);
             Dictionary<string, IDevice> activeDevices = new();
+            bool leaseSuccess = true;
             try
             {
-                bool leaseSuccess = true;
                 try
                 {
                     // === 1. 资源管理阶段 ===
@@ -251,14 +272,14 @@ namespace ZL.Gear.Engine.Runner
             _totalSw.Stop();
             // 记录确切的结束时间戳
             runResult.EndTime = DateTime.Now;
-            if (testWasStoppedByFail)
+            if (testWasStoppedByFail || !leaseSuccess)
             {
                 runResult.OverallSuccess = false;
             }
             else
             {
                 // 修复无设备需求报错
-                runResult.OverallSuccess = runResult.StepResults?.Count > 0 && runResult.StepResults.All(r => r.IsBranchSuccessful);
+                runResult.OverallSuccess = runResult.StepResults == null || runResult.StepResults.Count == 0 || runResult.StepResults.All(r => r.IsBranchSuccessful);
             }
             runResult.Summary = BuildSummary(runResult);
             HandleFinalResultsAsync(runResult, steps, model, barcode);
@@ -346,8 +367,7 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     //为了兼容老的代码，诸如 条码比对action已经检测过了，在此就不做结果评价了
-                                        var _Command = stepConfig.Command?.ToUpperInvariant();
-                    if (_Command == "BARCODECHECK" || _Command == "ECUPOWER" || _Command == "PLCDELAY" || _Command == "AUTOSBRSENSORCHECK")
+                                        if (stepConfig.EvaluateResult == false)
                     {
                         stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
                         stepResult.Message = measurementResult.Message;
@@ -368,7 +388,7 @@ namespace ZL.Gear.Engine.Runner
                         else
                         {
                             // 3. 评估结果（使用重构后的评估器）
-                            var evaluationResult = ResultEvaluator.Evaluate(stepResult, stepConfig);
+                            var evaluationResult = (_resultEvaluator ?? ResultEvaluator.Instance).Evaluate(stepResult, stepConfig);
                             _log($"[诊断] 评估详情: ExecutionType={stepConfig.ExecutionType}, ExpectedResults.Count={stepConfig.ExpectedResults?.Count ?? 0}");
                             _log($"[诊断] stepResult.Status={stepResult.Status}, stepResult.Outcome={stepResult.Outcome}");
                             _log($"[诊断] 评估结果: Success={evaluationResult.Success}, Message={evaluationResult.Message}");
@@ -497,9 +517,7 @@ namespace ZL.Gear.Engine.Runner
         {
             var requiredDeviceKeys = CollectRequiredDevices(steps);
             var activeDevices = new System.Collections.Concurrent.ConcurrentDictionary<string, IDevice>();
-            
-            _log($"准备并发租用 {requiredDeviceKeys.Count} 个设备: {string.Join(", ", requiredDeviceKeys)}");
-            
+
             var leaseTasks = requiredDeviceKeys.Select(async key =>
             {
                 var lease = await _deviceService.LeaseAsync<IDevice>(key, token);
@@ -508,7 +526,7 @@ namespace ZL.Gear.Engine.Runner
             });
 
             await Task.WhenAll(leaseTasks);
-            
+
             _log("所有设备并发租用及初始化成功。");
             return activeDevices.ToDictionary(k => k.Key, v => v.Value);
         }

@@ -38,6 +38,14 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             _log = log ?? (s => { });
         }
 
+        /// <summary>
+        /// 重置熔断器状态（主要用于测试）。
+        /// </summary>
+        public static void Reset()
+        {
+            _deviceStates.Clear();
+        }
+
         public async Task<ExecutionResult<List<Measurement>>> InvokeAsync(
             StepConfig step,
             StepContext context,
