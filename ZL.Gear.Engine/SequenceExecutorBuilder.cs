@@ -313,6 +313,10 @@ namespace ZL.Gear.Engine
                     log);
             });
 
+            // 暴露 IStepHandlerRegistry 接口（由 StepDispatcher 实现），
+            // 供运行时 EvaluateResult 命令级元数据查询（SequenceExecutor 桥接）与宿主扩展使用
+            services.AddSingleton<IStepHandlerRegistry>(sp => sp.GetRequiredService<StepDispatcher>());
+
             // 自定义服务配置（如果指定）
             _customServicesConfig?.Invoke(services);
 

@@ -28,9 +28,26 @@ namespace ZL.Gear.Core.Infrastructure
         /// <summary>
         /// 获取或设置一个值，指示该步骤的结果是否已由 Handler 自行判定。
         /// 如果为 true，SequenceExecutor 将跳过 ResultEvaluator，直接采用 Handler 的 Success/Failure 作为最终结果。
-        /// 默认值为 null，表示使用全局默认策略。
+        /// 仅当 <see cref="HasEvaluateResult"/> 为 true 时有效。
         /// </summary>
-        public bool? EvaluateResult { get; set; }
+        public bool EvaluateResult
+        {
+            get => _evaluateResult;
+            set
+            {
+                _evaluateResult = value;
+                HasEvaluateResult = true;
+            }
+        }
+        private bool _evaluateResult;
+
+        /// <summary>
+        /// 是否已通过 attribute 用法显式设置 <see cref="EvaluateResult"/>。
+        /// C# attribute 参数不支持可空值类型（CS0655），因此用 bool 值 + 本标志表达三态；
+        /// 标志为 false（未显式设置）时语义等同 null，即使用全局默认评估策略。
+        /// 该属性由 <see cref="EvaluateResult"/> 的 setter 自动置位，调用方只读。
+        /// </summary>
+        public bool HasEvaluateResult { get; private set; }
 
         /// <summary>
         /// 命令的中文或业务描述，可用于文档生成或日志展示。

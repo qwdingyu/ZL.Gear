@@ -353,6 +353,17 @@ namespace ZL.Gear.Engine.Runner
                 {
                     // 2. 执行本步骤自身的原子命令（仅当所有子步骤都通过时）
                     StepConfigNormalizer.Normalize(stepConfig, deviceRoles);
+
+                    // 桥接：若 StepConfig.EvaluateResult 仍未显式设置，则按命令名回填 Handler 侧元数据
+                    if (!stepConfig.EvaluateResult.HasValue)
+                    {
+                        var registry = context.GetService<IStepHandlerRegistry>();
+                        if (registry != null)
+                        {
+                            stepConfig.EvaluateResult = registry.GetEvaluateResult(stepConfig.Command);
+                        }
+                    }
+
                     var dispatcher = context.GetService<StepDispatcher>();
                     var measurementResult = await dispatcher.DispatchSingleAsync(stepConfig, context);
 

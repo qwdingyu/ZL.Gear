@@ -32,6 +32,13 @@ namespace ZL.Gear.Core.Infrastructure
         /// </summary>
         /// <returns>已注册命令的只读集合。</returns>
         IEnumerable<string> GetRegisteredCommands();
+
+        /// <summary>
+        /// 获取指定命令对应的 EvaluateResult 元数据（若 Handler 侧通过 <see cref="StepHandlerCommandAttribute"/> 标注）。
+        /// </summary>
+        /// <param name="command">命令名称。</param>
+        /// <returns>若存在元数据则返回其值，否则返回 null。</returns>
+        bool? GetEvaluateResult(string command);
     }
 
     /// <summary>

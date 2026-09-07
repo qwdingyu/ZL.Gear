@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
@@ -49,6 +50,11 @@ namespace ZL.Gear.Engine.Runner
         /// 日志输出委托。
         /// </summary>
         private Action<string> _log;
+
+        /// <summary>
+        /// 命令 -> StepHandlerCommandAttribute 元数据缓存（用于 EvaluateResult 桥接）。
+        /// </summary>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StepHandlerCommandAttribute> _handlerMetadata = new();
 
         /// <summary>
         /// 兼容旧代码的构造函数。
@@ -118,6 +124,35 @@ namespace ZL.Gear.Engine.Runner
             {
                 throw new InvalidOperationException($"Handler 注册表存在重复命令: {string.Join(", ", duplicatesInRegistry)}");
             }
+
+            // 检查 action 注册表内部重复
+            var actionCommands = _actionRegistry.GetRegisteredActions() ?? Enumerable.Empty<string>();
+            var duplicatesInActions = actionCommands
+                .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            if (duplicatesInActions.Any())
+            {
+                throw new InvalidOperationException($"Action 注册表存在重复命令: {string.Join(", ", duplicatesInActions)}");
+            }
+
+            // 交叉检查：handler 与 action 是否一致（通过 RegisterHandlerWithAction 应保证一一对应）
+            var registrySet = new HashSet<string>(registryCommands, StringComparer.OrdinalIgnoreCase);
+            var actionSet = new HashSet<string>(actionCommands, StringComparer.OrdinalIgnoreCase);
+
+            // 仅提示性警告：若存在不一致，说明有代码绕过了统一注册入口
+            var onlyInRegistry = registrySet.Except(actionSet, StringComparer.OrdinalIgnoreCase).ToList();
+            var onlyInActions = actionSet.Except(registrySet, StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (onlyInRegistry.Any() || onlyInActions.Any())
+            {
+                var msg = "Handler 与 Action 注册不一致。";
+                if (onlyInRegistry.Any()) msg += $" 仅注册 Handler 未注册 Action: {string.Join(", ", onlyInRegistry)}。";
+                if (onlyInActions.Any()) msg += $" 仅注册 Action 未注册 Handler: {string.Join(", ", onlyInActions)}。";
+                _log($"[警告] {msg}");
+            }
         }
 
         /// <summary>
@@ -163,6 +198,29 @@ namespace ZL.Gear.Engine.Runner
             RegisterHandler(command, handler, allowOverwrite);
             _actionRegistry.RegisterAction(command, handler.ExecuteAsync,
                 allowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+
+            // 缓存 Handler 的 StepHandlerCommandAttribute，供启动期/运行时 EvaluateResult 桥接使用
+            var attr = handler.GetType().GetCustomAttribute<StepHandlerCommandAttribute>(true);
+            if (attr != null)
+            {
+                _handlerMetadata[command] = attr;
+            }
+        }
+
+        /// <summary>
+        /// 获取指定命令对应的 EvaluateResult 元数据（若 Handler 侧通过 <see cref="StepHandlerCommandAttribute"/> 标注）。
+        /// </summary>
+        /// <param name="command">命令名称。</param>
+        /// <returns>若显式设置了 EvaluateResult 则返回其值，否则返回 null（未标注或未显式设置）。</returns>
+        public bool? GetEvaluateResult(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command)) return null;
+            if (_handlerMetadata.TryGetValue(command, out var attr))
+            {
+                // 仅返回显式设置的值；未显式设置（HasEvaluateResult=false）语义等同 null，避免默认值误触发跳过评估
+                return attr.HasEvaluateResult ? attr.EvaluateResult : (bool?)null;
+            }
+            return null;
         }
 
         /// <summary>
