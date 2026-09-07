@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.StepHandler;
@@ -125,6 +126,15 @@ namespace ZL.Gear.Engine.Runner
         public bool Unregister(string command)
         {
             return _handlers.TryRemove(command, out _);
+        }
+
+        /// <summary>
+        /// 获取所有已注册的命令名称。
+        /// </summary>
+        /// <returns>已注册命令的只读集合。</returns>
+        public IEnumerable<string> GetRegisteredCommands()
+        {
+            return _handlers.Keys.ToList();
         }
 
         /// <summary>

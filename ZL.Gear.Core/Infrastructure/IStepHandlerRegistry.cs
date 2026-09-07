@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using ZL.Gear.Core.Models;
+using ZL.Gear.Core.Workflow;
 
 namespace ZL.Gear.Core.Infrastructure
 {
@@ -17,6 +18,20 @@ namespace ZL.Gear.Core.Infrastructure
         /// <param name="handler">处理器实例。</param>
         /// <param name="allowOverwrite">是否允许覆盖已注册的同名命令处理器。</param>
         void RegisterHandler(string command, IStepHandler handler, bool allowOverwrite = true);
+
+        /// <summary>
+        /// 统一注册步骤处理器与对应的原子动作，避免调用方遗漏双注册中的任意一侧。
+        /// </summary>
+        /// <param name="command">命令名称。</param>
+        /// <param name="handler">处理器实例。</param>
+        /// <param name="allowOverwrite">是否允许覆盖已注册的 Handler 与 Action。</param>
+        void RegisterHandlerWithAction(string command, IStepHandler handler, bool allowOverwrite = true);
+
+        /// <summary>
+        /// 获取所有已注册的命令名称（用于启动期冲突扫描）。
+        /// </summary>
+        /// <returns>已注册命令的只读集合。</returns>
+        IEnumerable<string> GetRegisteredCommands();
     }
 
     /// <summary>
@@ -99,6 +114,12 @@ namespace ZL.Gear.Core.Infrastructure
         /// <param name="command">命令名称。</param>
         /// <returns>是否成功移除。</returns>
         bool Unregister(string command);
+
+        /// <summary>
+        /// 获取所有已注册的命令名称（用于启动期冲突扫描）。
+        /// </summary>
+        /// <returns>已注册命令的只读集合。</returns>
+        IEnumerable<string> GetRegisteredCommands();
 
         /// <summary>
         /// 移除所有以指定前缀开头的命令（用于插件卸载）。

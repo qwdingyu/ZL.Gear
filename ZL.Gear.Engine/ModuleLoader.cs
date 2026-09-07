@@ -116,8 +116,7 @@ namespace ZL.Gear.Engine
 
             // 核心处理器：DynamicFlow（JSON DSL 解释器）
             var dynamicHandler = new DynamicFlowHandler();
-            registry.RegisterHandler("DynamicFlow", dynamicHandler);
-            actionRegistry.RegisterAction("DynamicFlow", dynamicHandler.ExecuteAsync);
+            registry.RegisterHandlerWithAction("DynamicFlow", dynamicHandler);
 
             // PLC 通用操作（所有项目都可使用，如果找到 ZL.Gear.Drivers 程序集）
             RegisterHandlerIfExists(registry, actionRegistry, handlerFactory, log,
@@ -126,19 +125,16 @@ namespace ZL.Gear.Engine
 
             // 主从联动测量处理器
             var triggeredMeasureHandler = new LinkageMeasureHandler(log);
-            registry.RegisterHandler("TriggeredMeasure", triggeredMeasureHandler);
-            actionRegistry.RegisterAction("TriggeredMeasure", triggeredMeasureHandler.ExecuteAsync, RegistrationPolicy.ThrowIfExists);
+            registry.RegisterHandlerWithAction("TriggeredMeasure", triggeredMeasureHandler, allowOverwrite: false);
 
             // MicroWorkflow 综合演示处理器
             var microWorkflowDemoHandler = new MicroWorkflowDemoHandler(log);
-            registry.RegisterHandler("MicroWorkflowDemo", microWorkflowDemoHandler);
-            actionRegistry.RegisterAction("MicroWorkflowDemo", microWorkflowDemoHandler.ExecuteAsync, RegistrationPolicy.ThrowIfExists);
+            registry.RegisterHandlerWithAction("MicroWorkflowDemo", microWorkflowDemoHandler, allowOverwrite: false);
             MicroWorkflowDemoActions.Register(actionRegistry, log);
 
             // AI 决策处理器
             var aiHandler = new AiDecisionStepHandler();
-            registry.RegisterHandler("AiDecision", aiHandler);
-            actionRegistry.RegisterAction("AiDecision", aiHandler.ExecuteAsync);
+            registry.RegisterHandlerWithAction("AiDecision", aiHandler);
 
             log("[ModuleLoader] 内置 Handler 注册完成");
         }
@@ -191,8 +187,7 @@ namespace ZL.Gear.Engine
 
                 foreach (var cmd in commandNames)
                 {
-                    registry.RegisterHandler(cmd, handler);
-                    actionRegistry.RegisterAction(cmd, handler.ExecuteAsync, RegistrationPolicy.ThrowIfExists);
+                    registry.RegisterHandlerWithAction(cmd, handler, allowOverwrite: false);
                     log($"[ModuleLoader] 已注册内置 Handler: {cmd} -> {className}");
                 }
             }
@@ -374,8 +369,7 @@ namespace ZL.Gear.Engine
                 try
                 {
                     var instance = _handlerFactory.CreateHandler(type);
-                    _registry.RegisterHandler(cmdName, instance);
-                    _actionRegistry.RegisterAction(cmdName, instance.ExecuteAsync, RegistrationPolicy.ThrowIfExists);
+                    _registry.RegisterHandlerWithAction(cmdName, instance, allowOverwrite: false);
                 }
                 catch (Exception ex)
                 {
@@ -398,9 +392,7 @@ namespace ZL.Gear.Engine
                         command = $"{manifest.CommandPrefix}.{command}";
                     }
 
-                    _registry.RegisterHandler(command, instance, attr.AllowOverwrite);
-                    _actionRegistry.RegisterAction(command, instance.ExecuteAsync,
-                        attr.AllowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+                    _registry.RegisterHandlerWithAction(command, instance, attr.AllowOverwrite);
 
                     // 注册别名（兼容旧命令名或多入口调用）
                     if (attr.Aliases != null && attr.Aliases.Length > 0)
@@ -408,9 +400,7 @@ namespace ZL.Gear.Engine
                         foreach (var alias in attr.Aliases)
                         {
                             if (string.IsNullOrWhiteSpace(alias)) continue;
-                            _registry.RegisterHandler(alias, instance, attr.AllowOverwrite);
-                            _actionRegistry.RegisterAction(alias, instance.ExecuteAsync,
-                                attr.AllowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+                            _registry.RegisterHandlerWithAction(alias, instance, attr.AllowOverwrite);
                         }
                     }
                 }
@@ -528,9 +518,7 @@ namespace ZL.Gear.Engine
                 try
                 {
                     var instance = _handlerFactory.CreateHandler(type);
-                    _registry.RegisterHandler(attr.Command, instance, attr.AllowOverwrite);
-                    _actionRegistry.RegisterAction(attr.Command, instance.ExecuteAsync,
-                        attr.AllowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+                    _registry.RegisterHandlerWithAction(attr.Command, instance, attr.AllowOverwrite);
 
                     // 注册别名（兼容旧命令名或多入口调用）
                     if (attr.Aliases != null && attr.Aliases.Length > 0)
@@ -538,9 +526,7 @@ namespace ZL.Gear.Engine
                         foreach (var alias in attr.Aliases)
                         {
                             if (string.IsNullOrWhiteSpace(alias)) continue;
-                            _registry.RegisterHandler(alias, instance, attr.AllowOverwrite);
-                            _actionRegistry.RegisterAction(alias, instance.ExecuteAsync,
-                                attr.AllowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+                            _registry.RegisterHandlerWithAction(alias, instance, attr.AllowOverwrite);
                         }
                     }
                 }

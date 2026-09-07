@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Core;
@@ -129,6 +130,15 @@ namespace ZL.Gear.Engine
         {
             _customProfileService = profileService;
             _disposeProfileService = false;
+            return this;
+        }
+
+        /// <summary>
+        /// 使用自定义的 ILibraryService（构建器不会自动释放）
+        /// </summary>
+        public SequenceExecutorBuilder WithLibraryService(ILibraryService libraryService)
+        {
+            _customLibraryService = libraryService;
             return this;
         }
 
@@ -496,6 +506,11 @@ namespace ZL.Gear.Engine
         {
             if (string.IsNullOrEmpty(name)) return null;
             return _measurements.TryGetValue(name, out var measurement) ? measurement : null;
+        }
+
+        public IEnumerable<string> GetRegisteredActions()
+        {
+            return _actions.Keys.ToList();
         }
     }
 }

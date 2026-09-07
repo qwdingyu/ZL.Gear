@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
@@ -94,6 +95,29 @@ namespace ZL.Gear.Engine.Runner
                 _actionRegistry,
                 _handlerFactory,
                 _log);
+
+            ValidateNoConflicts();
+        }
+
+        /// <summary>
+        /// 校验注册表与动作注册表之间是否存在命令冲突（fail-fast）。
+        /// </summary>
+        /// <exception cref="InvalidOperationException">存在重复命令时抛出。</exception>
+        private void ValidateNoConflicts()
+        {
+            var registryCommands = GetRegisteredCommands();
+
+            // 检查 handler 注册表内部重复（理论上 Register 已处理，此处作为二次保险）
+            var duplicatesInRegistry = registryCommands
+                .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            if (duplicatesInRegistry.Any())
+            {
+                throw new InvalidOperationException($"Handler 注册表存在重复命令: {string.Join(", ", duplicatesInRegistry)}");
+            }
         }
 
         /// <summary>
@@ -126,6 +150,33 @@ namespace ZL.Gear.Engine.Runner
             {
                 throw new NotSupportedException("当前 HandlerLookup 实现不支持注册。");
             }
+        }
+
+        /// <summary>
+        /// 统一注册 Handler 与 Action，避免调用方遗漏双注册中的任意一侧。
+        /// </summary>
+        /// <param name="command">命令名称。</param>
+        /// <param name="handler">Handler 实例。</param>
+        /// <param name="allowOverwrite">是否允许覆盖已注册的 Handler/Action。</param>
+        public void RegisterHandlerWithAction(string command, IStepHandler handler, bool allowOverwrite = true)
+        {
+            RegisterHandler(command, handler, allowOverwrite);
+            _actionRegistry.RegisterAction(command, handler.ExecuteAsync,
+                allowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+        }
+
+        /// <summary>
+        /// 获取所有已注册的命令名称（用于启动期冲突扫描）。
+        /// </summary>
+        /// <returns>已注册命令的只读集合。</returns>
+        public IEnumerable<string> GetRegisteredCommands()
+        {
+            if (_handlerLookup is IRegisterableStepHandlerLookup registrableLookup)
+            {
+                return registrableLookup.GetRegisteredCommands();
+            }
+
+            return Array.Empty<string>();
         }
 
         /// <summary>

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Models;
@@ -150,6 +151,11 @@ namespace ZL.Gear.Engine.Workflow
         {
             if (_measurements.TryGetValue(name, out var action)) return action;
             throw new KeyNotFoundException($"测量动作 '{name}' 未注册。");
+        }
+
+        public IEnumerable<string> GetRegisteredActions()
+        {
+            return _actions.Keys.ToList();
         }
     }
 }

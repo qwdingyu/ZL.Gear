@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Models;
@@ -73,6 +74,12 @@ namespace ZL.Gear.Core.Workflow
         /// 注册一个测量动作（返回 Measurement 数据）
         /// </summary>
         void RegisterMeasurement(string name, MeasurementActionDelegate action, RegistrationPolicy policy = RegistrationPolicy.ThrowIfExists);
+
+        /// <summary>
+        /// 获取所有已注册的动作名称（用于启动期冲突扫描）。
+        /// </summary>
+        /// <returns>已注册动作的只读集合。</returns>
+        IEnumerable<string> GetRegisteredActions();
 
         ///// <summary>
         ///// 检查某个动作是否已注册
