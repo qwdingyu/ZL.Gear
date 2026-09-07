@@ -378,7 +378,7 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     // 由 StepConfig.EvaluateResult / StepHandlerCommandAttribute.EvaluateResult 控制是否跳过结果评估
-                                        if (stepConfig.EvaluateResult == false)
+                    if (stepConfig.EvaluateResult == false)
                     {
                         stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
                         stepResult.Message = measurementResult.Message;

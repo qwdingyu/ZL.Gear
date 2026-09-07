@@ -66,3 +66,17 @@ _ReSharper*/
 docs/Templates/
 PublishOutput/
 snapshots/
+# === 运行时审计日志（历史跟踪经 git rm --cached 解除，见提交说明）===
+logs/audit.log
+**/logs/audit.log
+
+# === 基准 / 测试 / 分析生成物 ===
+BenchmarkDotNet.Artifacts/
+**/TestResults/
+__pycache__/
+.reasonix/
+*.pyc
+
+# === SeatDemo 演示运行结果 ===
+docs/SeatDemo/data/results/
+docs/SeatDemo/src/SeatDemo.ConsoleApp/snapshots/

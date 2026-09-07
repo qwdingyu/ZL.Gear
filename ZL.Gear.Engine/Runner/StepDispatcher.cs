@@ -106,9 +106,15 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
-        /// 校验注册表与动作注册表之间是否存在命令冲突（fail-fast）。
+        /// 启动期一致性校验（构造完成后调用），分三类：
+        /// 1. Handler 注册表内部"仅大小写不同"的近似重复 → fail-fast；
+        /// 2. Action 注册表内部"仅大小写不同"的近似重复 → fail-fast；
+        /// 3. 交叉提示：仅注册 Handler 未注册 Action 的命令（DynamicFlow DSL 中无法以 ActionKey 调用）→ 警告。
+        ///    反向（仅注册 Action 未注册 Handler）不提示：纯动作 Provider（System.Delay/Log/Write 等原语、
+        ///    测量动作）本就无需对应 Handler，属合法常态。
+        /// 注：注册表底层为 ConcurrentDictionary，key 不可能精确重复，故 1/2 实际只捕获大小写变体。
         /// </summary>
-        /// <exception cref="InvalidOperationException">存在重复命令时抛出。</exception>
+        /// <exception cref="InvalidOperationException">检测到仅大小写不同的重复命令时抛出。</exception>
         private void ValidateNoConflicts()
         {
             var registryCommands = GetRegisteredCommands();
@@ -142,16 +148,13 @@ namespace ZL.Gear.Engine.Runner
             var registrySet = new HashSet<string>(registryCommands, StringComparer.OrdinalIgnoreCase);
             var actionSet = new HashSet<string>(actionCommands, StringComparer.OrdinalIgnoreCase);
 
-            // 仅提示性警告：若存在不一致，说明有代码绕过了统一注册入口
+            // 交叉提示：仅注册 Handler 未注册 Action 的命令（DynamicFlow DSL 将无法解析其 ActionKey）。
+            // 反向（仅注册 Action）属合法常态（纯动作 Provider），不提示，避免启动期误报噪音。
             var onlyInRegistry = registrySet.Except(actionSet, StringComparer.OrdinalIgnoreCase).ToList();
-            var onlyInActions = actionSet.Except(registrySet, StringComparer.OrdinalIgnoreCase).ToList();
 
-            if (onlyInRegistry.Any() || onlyInActions.Any())
+            if (onlyInRegistry.Any())
             {
-                var msg = "Handler 与 Action 注册不一致。";
-                if (onlyInRegistry.Any()) msg += $" 仅注册 Handler 未注册 Action: {string.Join(", ", onlyInRegistry)}。";
-                if (onlyInActions.Any()) msg += $" 仅注册 Action 未注册 Handler: {string.Join(", ", onlyInActions)}。";
-                _log($"[警告] {msg}");
+                _log($"[警告] 以下命令仅注册了 Handler 未注册 Action，DynamicFlow DSL 中无法通过 ActionKey 调用: {string.Join(", ", onlyInRegistry)}");
             }
         }
 

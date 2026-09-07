@@ -21,9 +21,9 @@ namespace ZL.Gear.Engine.Runner
     {
         /// <summary>
         /// 专用 Handler 注册表，线程安全，支持并发读写。
-        /// 键为命令名称，值为对应的 Handler 实例。
+        /// 键为命令名称（大小写不敏感，与 Action 注册表、冲突扫描语义一致），值为对应的 Handler 实例。
         /// </summary>
-        private readonly ConcurrentDictionary<string, IStepHandler> _handlers = new();
+        private readonly ConcurrentDictionary<string, IStepHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Handler 提供者：负责提供模板 Handler 和回退 Handler。
