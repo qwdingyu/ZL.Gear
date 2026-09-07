@@ -60,10 +60,25 @@ namespace ZL.Gear.Engine
         private ExecutionScenario _scenario = ExecutionScenario.Production;
         private List<IDisposable> _resourceHolder = new();
         private IResultEvaluator _resultEvaluator;
+        private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
         {
             _resultEvaluator = resultEvaluator;
+            return this;
+        }
+
+        /// <summary>
+        /// 注册自定义步骤处理器，由构建器在初始化工作流服务后统一注入。
+        /// </summary>
+        /// <param name="command">命令名称，对应 StepConfig.Command。</param>
+        /// <param name="handler">处理器实例。</param>
+        public SequenceExecutorBuilder WithHandlers(string command, IStepHandler handler)
+        {
+            if (string.IsNullOrWhiteSpace(command)) throw new ArgumentException("命令名称不能为空。", nameof(command));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            _handlerRegistrations.Add((command, handler));
             return this;
         }
 
@@ -192,13 +207,31 @@ namespace ZL.Gear.Engine
             // 4. 创建或使用自定义的 IGearProfileService
             var profileService = _customProfileService ?? CreateDefaultProfileService(libraryService);
 
-            // 5. 初始化工作流服务
-            InitializeWorkflowServices(libraryService);
+            // 5. 初始化工作流服务并获取服务提供者，用于注册自定义 Handler
+            var provider = InitializeWorkflowServices(libraryService);
 
-            // 5. 创建日志器
+            // 注册自定义 Handler（避免调用方通过 ServiceLocator 获取 StepDispatcher）
+            if (_handlerRegistrations.Count > 0)
+            {
+                var dispatcher = provider.GetService(typeof(StepDispatcher)) as StepDispatcher;
+                if (dispatcher != null)
+                {
+                    foreach (var (command, handler) in _handlerRegistrations)
+                    {
+                        dispatcher.RegisterHandler(command, handler);
+                        _logger?.Invoke($"[SequenceExecutorBuilder] 已注册自定义 Handler: {command}");
+                    }
+                }
+                else
+                {
+                    _logger?.Invoke("[SequenceExecutorBuilder] 警告: 无法获取 StepDispatcher，自定义 Handler 未注册");
+                }
+            }
+
+            // 6. 创建日志器
             var logger = CreateLogger();
 
-            // 6. 创建 SequenceExecutor
+            // 7. 创建 SequenceExecutor
             _logger?.Invoke("[SequenceExecutorBuilder] 构建完成");
 
             // 创建包装器，负责资源释放
@@ -266,7 +299,7 @@ namespace ZL.Gear.Engine
             }
         }
 
-        private void InitializeWorkflowServices(ILibraryService libraryService)
+        private IServiceProvider InitializeWorkflowServices(ILibraryService libraryService)
         {
             _logger?.Invoke("[SequenceExecutorBuilder] 初始化工作流服务...");
 
@@ -322,6 +355,7 @@ namespace ZL.Gear.Engine
 
             var provider = services.BuildServiceProvider();
             WorkflowGlobal.Initialize(provider);
+            return provider;
         }
 
         private ILogger<SequenceExecutor> CreateLogger()
