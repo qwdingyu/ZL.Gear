@@ -99,9 +99,17 @@ namespace ZL.Gear.Engine.Runner
         /// <returns>健康检查结果；若无法解析 <see cref="StepDispatcher"/> 则返回 null。</returns>
         public async Task<HealthCheckResult?> TryCheckStepHealthAsync(StepConfig step, CancellationToken cancellationToken = default)
         {
-            var dispatcher = WorkflowGlobal.Services.GetService(typeof(StepDispatcher)) as StepDispatcher;
-            if (dispatcher == null) return null;
-            return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
+            try
+            {
+                var dispatcher = WorkflowGlobal.Services.GetService(typeof(StepDispatcher)) as StepDispatcher;
+                if (dispatcher == null) return null;
+                return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
+            }
+            catch (InvalidOperationException)
+            {
+                // WorkflowGlobal 尚未初始化，无法解析 StepDispatcher
+                return null;
+            }
         }
 
         /// <summary>
