@@ -4,8 +4,6 @@ using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Models;
-using ZL.Gear.Core.Models;
-using ZL.Gear.Core.Models;
 
 namespace ZL.Gear.Abstractions.Extensions
 {
