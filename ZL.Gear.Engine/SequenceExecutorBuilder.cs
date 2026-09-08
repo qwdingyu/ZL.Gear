@@ -62,6 +62,7 @@ namespace ZL.Gear.Engine
         private IResultEvaluator _resultEvaluator;
         private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
         private bool _enableUnknownCommandWarning = true;
+        private bool _built;
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
         {
@@ -194,9 +195,18 @@ namespace ZL.Gear.Engine
         {
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
 
+            // 同一 builder 实例不可重复 Build（配置已被首个执行器消费，二次 Build 属误用）
+            if (_built)
+            {
+                throw new InvalidOperationException("同一 SequenceExecutorBuilder 实例不能重复调用 Build()；如需新的执行器，请重新 Create()。");
+            }
+            _built = true;
+
+            // 跨 builder 场景：WorkflowGlobal 为进程级单例，仅首个 Build 的全局服务配置生效。
+            // 此处不抛异常（同进程多次独立 Build 是测试与多场景的合法用法），仅以警告提示可见性。
             if (ZL.Gear.Core.Workflow.WorkflowGlobal.IsInitialized)
             {
-                throw new InvalidOperationException("WorkflowGlobal 已初始化，请勿重复调用 Build()；如需多执行器，请先重置 WorkflowGlobal 或采用多进程部署。");
+                _logger?.Invoke("[SequenceExecutorBuilder][警告] WorkflowGlobal 已被先前 Build 初始化，本次 Build 的全局服务注册不会生效；如需独立全局配置请先 WorkflowGlobal.Reset() 或采用多进程部署。");
             }
 
             // 1. 初始化项目库服务 (核心上下文)
