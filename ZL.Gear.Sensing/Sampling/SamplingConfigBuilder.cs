@@ -6,9 +6,6 @@ namespace ZL.Gear.Sensing
     public class SamplingConfigBuilder<T>
     {
         private readonly SamplingConfig<T> _config;
-        private bool _isTriggerSet = false; // 新增标志位
-        private bool _isIntervalSet = false;
-        private bool _isTimeoutSet = false;
 
         public SamplingConfigBuilder()
         {
@@ -24,21 +21,18 @@ namespace ZL.Gear.Sensing
         public SamplingConfigBuilder<T> WithTrigger(IExecutionTrigger<T> trigger)
         {
             _config.Trigger = trigger;
-            _isTriggerSet = true; // 标记用户已设置
             return this;
         }
 
         public SamplingConfigBuilder<T> WithInterval(int intervalMs)
         {
             _config.SampleIntervalMs = intervalMs;
-            _isIntervalSet = true;
             return this;
         }
 
         public SamplingConfigBuilder<T> WithTimeout(int timeoutMs)
         {
             _config.TotalTimeoutMs = timeoutMs;
-            _isTimeoutSet = true;
             return this;
         }
         /// <summary>
@@ -47,7 +41,6 @@ namespace ZL.Gear.Sensing
         public SamplingConfigBuilder<T> WithActiveDuration(int durationMs)
         {
             _config.ActiveDurationMs = durationMs;
-            _isTimeoutSet = true;
             return this;
         }
         /// <summary>

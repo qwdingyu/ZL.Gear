@@ -407,7 +407,7 @@ namespace ZL.Gear.Core.Models
         /// <summary>
         /// 强类型值访问
         /// </summary>
-        public new TValue? GetValue()
+        public TValue? GetValue()
         {
             return Value;
         }
