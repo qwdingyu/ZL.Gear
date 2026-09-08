@@ -61,10 +61,21 @@ namespace ZL.Gear.Engine
         private List<IDisposable> _resourceHolder = new();
         private IResultEvaluator _resultEvaluator;
         private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
+        private bool _enableUnknownCommandWarning = true;
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
         {
             _resultEvaluator = resultEvaluator;
+            return this;
+        }
+
+        /// <summary>
+        /// 设置未知命令走通用回退时是否输出诊断警告日志。
+        /// </summary>
+        /// <param name="enable">是否启用未知命令诊断警告，默认 true。</param>
+        public SequenceExecutorBuilder WithEnableUnknownCommandWarning(bool enable)
+        {
+            _enableUnknownCommandWarning = enable;
             return this;
         }
 
@@ -182,6 +193,11 @@ namespace ZL.Gear.Engine
         public SequenceExecutor Build()
         {
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
+
+            if (ZL.Gear.Core.Workflow.WorkflowGlobal.IsInitialized)
+            {
+                throw new InvalidOperationException("WorkflowGlobal 已初始化，请勿重复调用 Build()；如需多执行器，请先重置 WorkflowGlobal 或采用多进程部署。");
+            }
 
             // 1. 初始化项目库服务 (核心上下文)
             var libraryService = _customLibraryService ?? CreateDefaultLibraryService();
@@ -343,7 +359,8 @@ namespace ZL.Gear.Engine
                     new DefaultStepHandlerFactory(),
                     actionRegistry,
                     pipeline,
-                    log);
+                    log,
+                    _enableUnknownCommandWarning);
             });
 
             // 暴露 IStepHandlerRegistry 接口（由 StepDispatcher 实现），

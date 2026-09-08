@@ -104,7 +104,10 @@ namespace ZL.Gear.Engine.Runner
             return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
         }
 
-        // 创建一个私有的、并行的计时器循环方法
+        /// <summary>
+        /// 后台计时器循环（当前为保留实现，暂未对外广播总耗时事件）。
+        /// </summary>
+        /// <param name="token">取消令牌。</param>
         private async Task RunTimerLoopAsync(CancellationToken token)
         {
             // 每秒更新一次
@@ -124,12 +127,29 @@ namespace ZL.Gear.Engine.Runner
                 }
             }
         }
-        public async Task<TestRunResult> ExecuteAsync(List<StepConfig> steps, string model, string barcode,
-            Dictionary<string, object> globalContext, CancellationToken token, IProgress<StepRunResult> progress = null)
+
+        /// <summary>
+        /// 执行完整测试序列。
+        /// </summary>
+        /// <param name="steps">顶层步骤配置列表。</param>
+        /// <param name="model">产品型号。</param>
+        /// <param name="barcode">条码；为空时按手动单项测试处理。</param>
+        /// <param name="globalContext">全局上下文变量。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <param name="progress">步骤进度报告。</param>
+        /// <returns>测试运行结果。</returns>
+        /// <exception cref="ObjectDisposedException">执行器已释放。</exception>
+        public async Task<TestRunResult> ExecuteAsync(
+            List<StepConfig> steps,
+            string model,
+            string barcode,
+            Dictionary<string, object> globalContext,
+            CancellationToken token,
+            IProgress<StepRunResult> progress = null)
         {
             _progressReporter = progress;
             if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
-            
+
             // Dispose existing CTS to prevent memory leak
             if (_cancellationTokenSource != null)
             {
@@ -308,11 +328,12 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
-        /// [全新增] 递归执行器，是新架构的核心。
+        /// 递归执行单个步骤及其子步骤树。
         /// </summary>
-        /// <param name="stepConfig">当前要执行的步骤的配置。</param>
-        /// <param name="stepResult">与stepConfig对应的、用于存储运行时结果的对象。</param>
+        /// <param name="stepConfig">当前要执行的步骤配置。</param>
+        /// <param name="stepResult">与 stepConfig 对应的运行时结果对象。</param>
         /// <param name="context">执行上下文。</param>
+        /// <remarks>子步骤执行失败且配置 StopByFail=true 时，会提前中断兄弟步骤。</remarks>
         private async Task ExecuteStepRecursiveAsync(StepConfig stepConfig, StepRunResult stepResult, StepContext context)
         {
             var sw = Stopwatch.StartNew();
@@ -444,8 +465,11 @@ namespace ZL.Gear.Engine.Runner
             }
         }
         /// <summary>
-        ///  辅助方法，用于执行子步骤
+        /// 执行父步骤下的全部子步骤（支持并行/串行模式）。
         /// </summary>
+        /// <param name="parentConfig">父步骤配置。</param>
+        /// <param name="parentResult">父步骤结果对象。</param>
+        /// <param name="parentContext">父步骤执行上下文。</param>
         private async Task ExecuteSubStepsAsync(StepConfig parentConfig, StepRunResult parentResult, StepContext parentContext)
         {
             _log($"[子步骤] 开始执行 {parentConfig.StepName} 的 {parentConfig.SubSteps.Count} 个子步骤，模式: {parentConfig.ExecutionMode}");
@@ -524,6 +548,13 @@ namespace ZL.Gear.Engine.Runner
             }
         }
 
+        /// <summary>
+        /// 并发租用步骤序列所需的物理设备。
+        /// </summary>
+        /// <param name="steps">步骤配置列表。</param>
+        /// <param name="leases">租约集合，成功后会向其中追加释放句柄。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <returns>逻辑设备名到物理设备实例的映射。</returns>
         private async Task<Dictionary<string, IDevice>> LeaseRequiredDevicesAsync(List<StepConfig> steps, List<IDisposable> leases, CancellationToken token)
         {
             var requiredDeviceKeys = CollectRequiredDevices(steps);
@@ -542,6 +573,13 @@ namespace ZL.Gear.Engine.Runner
             return activeDevices.ToDictionary(k => k.Key, v => v.Value);
         }
 
+        /// <summary>
+        /// 处理最终运行结果事件。
+        /// </summary>
+        /// <param name="runResult">运行结果。</param>
+        /// <param name="_originalConfigs">原始配置列表。</param>
+        /// <param name="model">产品型号。</param>
+        /// <param name="barcode">条码。</param>
         private void HandleFinalResultsAsync(TestRunResult runResult, List<StepConfig> _originalConfigs, string model, string barcode)
         {
             // 如果条码为空，则认定为手动单项测试
@@ -552,6 +590,11 @@ namespace ZL.Gear.Engine.Runner
             }
         }
 
+        /// <summary>
+        /// 构建测试结果摘要字符串。
+        /// </summary>
+        /// <param name="runResult">运行结果。</param>
+        /// <returns>可读的摘要文本。</returns>
         private string BuildSummary(TestRunResult runResult)
         {
             var sb = new StringBuilder();
@@ -577,7 +620,11 @@ namespace ZL.Gear.Engine.Runner
 
             return sb.ToString();
         }
-        // 辅助方法：扫描整个序列，找出所有需要用到的设备 (保持不变)
+        /// <summary>
+        /// 扫描整个步骤序列，收集所需设备键。
+        /// </summary>
+        /// <param name="sequence">顶层步骤列表。</param>
+        /// <returns>所需设备键集合。</returns>
         private HashSet<string> CollectRequiredDevices(List<StepConfig> sequence)
         {
             var keys = new HashSet<string>();
@@ -680,8 +727,11 @@ namespace ZL.Gear.Engine.Runner
                 foreach (var item in list) CollectNestedTargets(item, keys);
             }
         }
-        // 辅助方法：递归应用 Profile
-        // 建议将其放到 StepConfigKit 中，但为了快速生效，暂置于此
+        /// <summary>
+        /// 递归将 Profile 应用到步骤树。
+        /// </summary>
+        /// <param name="step">当前步骤。</param>
+        /// <param name="profile">Profile 映射表。</param>
         private void ApplyProfileToStepTree(StepConfig step, IDictionary<string, string> profile)
         {
             if (step == null) return;
@@ -696,6 +746,9 @@ namespace ZL.Gear.Engine.Runner
             }
         }
 
+        /// <summary>
+        /// 请求停止当前测试序列。
+        /// </summary>
         public void Stop()
         {
             if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
@@ -705,6 +758,9 @@ namespace ZL.Gear.Engine.Runner
                 _log("收到停止请求，测试流程取消");
             }
         }
+        /// <summary>
+        /// 释放执行器资源。
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;

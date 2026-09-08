@@ -6,15 +6,25 @@ using ZL.Gear.Core.Utils;
 
 namespace ZL.Gear.Engine.Runner
 {
-    // 建议放在一个专门的 "Normalization" 或 "Compatibility" 文件夹下
+    /// <summary>
+    /// StepConfig 归一化工具。
+    /// 职责：兼容旧格式参数、桥接 EvaluateResult、递归归一化子步骤。
+    /// </summary>
     public static class StepConfigNormalizer
     {
         /// <summary>
-        /// 检查 StepConfig，如果它使用了旧的'|'分隔符格式定义期望结果，
-        /// 则将其解析并转换为标准的 ExpectedResults 列表格式。
-        /// 这个方法是幂等的，多次调用无副作用。
+        /// 归一化 StepConfig：兼容旧格式参数、桥接 EvaluateResult、递归处理子步骤。
         /// </summary>
-        /// <param name="step">要进行归一化的步骤配置</param>
+        /// <param name="step">要进行归一化的步骤配置。</param>
+        /// <param name="deviceRoles">设备角色映射表。</param>
+        /// <remarks>
+        /// 主要处理：
+        /// 1. 将 AdditionalTargets 映射到 TargetDict；
+        /// 2. 保证 DurationMs 不超过总超时；
+        /// 3. 从 Parameters 回填 EvaluateResult；
+        /// 4. 旧格式 LCL/UCL/Offset 转 ExpectedResults；
+        /// 5. 递归归一化 SubSteps。
+        /// </remarks>
         public static void Normalize(StepConfig step, IDictionary<string, object> deviceRoles)
         {
             // 如果步骤为 null，则直接返回，防止异常

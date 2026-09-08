@@ -52,6 +52,11 @@ namespace ZL.Gear.Engine.Runner
         private Action<string> _log;
 
         /// <summary>
+        /// 未知命令走通用回退时是否输出诊断警告日志。
+        /// </summary>
+        private readonly bool _enableUnknownCommandWarning;
+
+        /// <summary>
         /// 命令 -> StepHandlerCommandAttribute 元数据缓存（用于 EvaluateResult 桥接）。
         /// </summary>
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StepHandlerCommandAttribute> _handlerMetadata = new();
@@ -68,13 +73,15 @@ namespace ZL.Gear.Engine.Runner
         /// </summary>
         /// <param name="actionService">动作注册表。</param>
         /// <param name="log">日志输出委托。</param>
-        public StepDispatcher(IActionRegistry actionService, Action<string> log)
+        /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
+        public StepDispatcher(IActionRegistry actionService, Action<string> log, bool enableUnknownCommandWarning = true)
             : this(
                 CreateDefaultLookup(log),
                 new DefaultStepHandlerFactory(),
                 actionService,
                 new StepPipelineBuilder().UseDefaultPipeline().Build(),
-                log)
+                log,
+                enableUnknownCommandWarning)
         {
         }
 
@@ -86,19 +93,22 @@ namespace ZL.Gear.Engine.Runner
         /// <param name="actionRegistry">动作注册表。</param>
         /// <param name="pipeline">中间件执行管道。</param>
         /// <param name="log">日志输出委托。</param>
+        /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
         /// <exception cref="ArgumentNullException">任意依赖项为 null。</exception>
         public StepDispatcher(
             IStepHandlerLookup handlerLookup,
             IStepHandlerFactory handlerFactory,
             IActionRegistry actionRegistry,
             StepExecutionPipeline pipeline,
-            Action<string> log)
+            Action<string> log,
+            bool enableUnknownCommandWarning = true)
         {
             _handlerLookup = handlerLookup ?? throw new ArgumentNullException(nameof(handlerLookup));
             _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
             _actionRegistry = actionRegistry ?? throw new ArgumentNullException(nameof(actionRegistry));
             _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
             _log = log ?? (s => { });
+            _enableUnknownCommandWarning = enableUnknownCommandWarning;
 
             // 注册框架内置的通用 Handler 与动作
             ModuleLoader.RegisterBuiltInHandlers(
@@ -111,13 +121,8 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
-        /// 启动期一致性校验（构造完成后调用），分三类：
-        /// 1. Handler 注册表内部"仅大小写不同"的近似重复 → fail-fast；
-        /// 2. Action 注册表内部"仅大小写不同"的近似重复 → fail-fast；
-        /// 3. 交叉提示：仅注册 Handler 未注册 Action 的命令（DynamicFlow DSL 中无法以 ActionKey 调用）→ 警告。
-        ///    反向（仅注册 Action 未注册 Handler）不提示：纯动作 Provider（System.Delay/Log/Write 等原语、
-        ///    测量动作）本就无需对应 Handler，属合法常态。
-        /// 注：注册表底层为 ConcurrentDictionary，key 不可能精确重复，故 1/2 实际只捕获大小写变体。
+        /// 启动期一致性校验（构造完成后调用）。
+        /// 主要检查：注册表内部大小写近似重复、Handler/Action 双注册一致性。
         /// </summary>
         /// <exception cref="InvalidOperationException">检测到仅大小写不同的重复命令时抛出。</exception>
         private void ValidateNoConflicts()
@@ -218,7 +223,14 @@ namespace ZL.Gear.Engine.Runner
                 {
                     if (_parameterSchemas.TryGetValue(command, out var existingSchema) && existingSchema != attr.ParameterSchema)
                     {
-                        throw new InvalidOperationException($"命令 '{command}' 存在多个不一致的参数 schema 定义: '{existingSchema}' vs '{attr.ParameterSchema}'");
+                        if (allowOverwrite)
+                        {
+                            _log($"[警告] 命令 '{command}' 参数 schema 被覆盖: '{existingSchema}' -> '{attr.ParameterSchema}'");
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"命令 '{command}' 存在多个不一致的参数 schema 定义: '{existingSchema}' vs '{attr.ParameterSchema}'");
+                        }
                     }
                     _parameterSchemas[command] = attr.ParameterSchema;
                 }
@@ -296,6 +308,10 @@ namespace ZL.Gear.Engine.Runner
         /// <param name="step">要执行的步骤配置。</param>
         /// <param name="context">执行上下文。</param>
         /// <returns>执行结果。</returns>
+        /// <remarks>
+        /// 查找顺序：注册表专用 Handler → DSL 模板 Handler → 通用设备调用回退。
+        /// 超时采用步骤级独立 CancellationTokenSource，并与上下文令牌链接。
+        /// </remarks>
         private async Task<ExecutionResult<List<Measurement>>> DispatchCoreAsync(StepConfig step, StepContext context)
         {
             // 1. 空命令直接返回成功（容器步骤）
@@ -322,7 +338,10 @@ namespace ZL.Gear.Engine.Runner
             // 策略 3: 使用通用设备调用（最终回退）
             else
             {
-                _log($"未找到专用 Handler 和 DSL 模板，使用通用设备调用: {step.Command}");
+                if (_enableUnknownCommandWarning)
+                {
+                    _log($"[警告] 未找到专用 Handler 和 DSL 模板，使用通用设备调用: {step.Command}（如需关闭此警告，请设置 enableUnknownCommandWarning=false）");
+                }
                 handler = _handlerLookup.GetFallbackHandler(step);
             }
 
