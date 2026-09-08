@@ -193,6 +193,7 @@ namespace ZL.Gear.Engine
         /// </summary>
         public SequenceExecutor Build()
         {
+            _logger ??= msg => Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {msg}");
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
 
             // 同一 builder 实例不可重复 Build（配置已被首个执行器消费，二次 Build 属误用）
