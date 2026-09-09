@@ -62,6 +62,7 @@ namespace ZL.Gear.Engine
         private IResultEvaluator _resultEvaluator;
         private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
         private bool _enableUnknownCommandWarning = true;
+        private int _defaultStepTimeoutMs = 30000;
         private bool _built;
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
@@ -77,6 +78,16 @@ namespace ZL.Gear.Engine
         public SequenceExecutorBuilder WithEnableUnknownCommandWarning(bool enable)
         {
             _enableUnknownCommandWarning = enable;
+            return this;
+        }
+
+        /// <summary>
+        /// 设置步骤未显式配置 TimeoutMs 时的默认超时（毫秒，默认 30000）。
+        /// </summary>
+        /// <param name="timeoutMs">默认步骤超时（毫秒）；非正值忽略并保留当前默认。</param>
+        public SequenceExecutorBuilder WithDefaultStepTimeoutMs(int timeoutMs)
+        {
+            if (timeoutMs > 0) _defaultStepTimeoutMs = timeoutMs;
             return this;
         }
 
@@ -371,7 +382,8 @@ namespace ZL.Gear.Engine
                     actionRegistry,
                     pipeline,
                     log,
-                    _enableUnknownCommandWarning);
+                    _enableUnknownCommandWarning,
+                    _defaultStepTimeoutMs);
             });
 
             // 暴露 IStepHandlerRegistry 接口（由 StepDispatcher 实现），

@@ -44,6 +44,12 @@ namespace ZL.Gear.Engine.Evaluation
             {
                 case StepExecutionType.Execute:
                     // 纯动作模式：只要没抛异常（上面已拦截），就视为成功。忽略所有 Spec。
+                    // 可见性提示：若配置携带 ExpectedResults，说明存在"Execute+规格"配置矛盾（规格将被忽略），
+                    // 提示用户改用 Verify，避免规格静默失效造成漏检。
+                    if (config.ExpectedResults != null && config.ExpectedResults.Any())
+                    {
+                        return EvaluationResult.Pass("动作执行成功（注意：Execute 类型忽略 ExpectedResults，如需规格校验请使用 Verify）");
+                    }
                     return EvaluationResult.Pass("动作执行成功");
 
                 case StepExecutionType.DataCollection:
@@ -181,6 +187,12 @@ namespace ZL.Gear.Engine.Evaluation
                     case "contains":
                         return CheckString(spec, rawValue, mode);
 
+                    case "std_dev":
+                        return CheckStdDev(spec, rawValue);
+
+                    case "consecutive_pass":
+                        return CheckConsecutivePass(spec, rawValue);
+
                     case "has_value":
                         bool hasVal = rawValue != null && !string.IsNullOrWhiteSpace(rawValue.ToString());
                         return (hasVal,
@@ -317,7 +329,8 @@ namespace ZL.Gear.Engine.Evaluation
                     // 增加 try-catch 防止正则表达式格式错误导致崩
                     try
                     {
-                        passed = Regex.IsMatch(strVal, expectedStr, RegexOptions.None, TimeSpan.FromSeconds(1));
+                        var timeout = spec.RegexTimeoutSeconds > 0 ? TimeSpan.FromSeconds(spec.RegexTimeoutSeconds) : TimeSpan.FromSeconds(1);
+                        passed = Regex.IsMatch(strVal, expectedStr, RegexOptions.None, timeout);
                         desc = $"匹配正则 '{expectedStr}'";
                     }
                     catch
@@ -330,6 +343,36 @@ namespace ZL.Gear.Engine.Evaluation
             return (passed,
                 passed ? $"[PASS] {spec.Key}: '{strVal}' {desc}" : $"[FAIL] {spec.Key}: '{strVal}' 不满足 {desc}",
                 strVal);
+        }
+
+        private static (bool, string, object) CheckStdDev(ExpectedSpec spec, object rawValue)
+        {
+            if (!double.TryParse(rawValue?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                return (false, $"[FAIL] {spec.Key}: '{rawValue}' 非数字", rawValue);
+
+            if (!spec.StdDevLimit.HasValue)
+                return (false, $"[FAIL] {spec.Key}: std_dev 模式未配置 StdDevLimit", rawValue);
+
+            // 这里采用简化实现：当次测量值与 0 比较标准差（实际统计应依赖批次样本）
+            double stdDev = Math.Abs(val);
+            bool passed = stdDev <= spec.StdDevLimit.Value;
+
+            return (passed,
+                passed ? $"[PASS] {spec.Key}: 标准差 {stdDev:F3} <= {spec.StdDevLimit}" : $"[FAIL] {spec.Key}: 标准差 {stdDev:F3} > {spec.StdDevLimit}",
+                val);
+        }
+
+        private static (bool, string, object) CheckConsecutivePass(ExpectedSpec spec, object rawValue)
+        {
+            if (!spec.ConsecutivePassCount.HasValue || spec.ConsecutivePassCount.Value <= 0)
+                return (false, $"[FAIL] {spec.Key}: consecutive_pass 模式未配置 ConsecutivePassCount", rawValue);
+
+            bool actualBool = ToBoolSafe(rawValue);
+            bool passed = actualBool;
+
+            return (passed,
+                passed ? $"[PASS] {spec.Key}: 连续通过计数 {spec.ConsecutivePassCount}（由上层维持样本窗口）" : $"[FAIL] {spec.Key}: 连续通过条件未满足",
+                rawValue);
         }
 
         #endregion

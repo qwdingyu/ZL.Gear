@@ -19,7 +19,7 @@ namespace ZL.Gear.Core.Workflow
         private StepContext _context;
         private readonly ConcurrentBag<Measurement> _measurements = new ConcurrentBag<Measurement>();
         private Task<ExecutionResultBase> _executionChain;
-        private readonly ConcurrentBag<ActionDelegate> _cleanupActions = new ConcurrentBag<ActionDelegate>();
+        private readonly System.Collections.Concurrent.ConcurrentStack<ActionDelegate> _cleanupActions = new System.Collections.Concurrent.ConcurrentStack<ActionDelegate>();
         private Action<string> Log { get; }
         /// <summary>
         /// 标记是否开启严格检查（必须有测量数据）
@@ -200,9 +200,8 @@ namespace ZL.Gear.Core.Workflow
         /// <param name="cleanupAction">要执行的清理操作。</param>
         public MicroWorkflow Finally(string description, ActionDelegate cleanupAction)
         {
-            // 说明：ConcurrentBag 对同一线程的插入与枚举通常近似后进先出，但语言规范不保证严格顺序；
-            // 独立清理任务（如停止不同设备）顺序通常不重要，无需为此引入有序容器。
-            _cleanupActions.Add(async (s, c) =>
+            // 使用 ConcurrentStack 保证清理操作按注册的相反顺序执行（LIFO），确保资源释放顺序正确。
+            _cleanupActions.Push(async (s, c) =>
             {
                 c.Log($"-> 清理: {description}");
                 await cleanupAction(s, c).ConfigureAwait(false);
@@ -453,8 +452,10 @@ namespace ZL.Gear.Core.Workflow
                 {
                     try
                     {
-                        ctx.Log($"[并行] 启动: {t.subDesc}");
-                        return await t.action(step, ctx).ConfigureAwait(false);
+                        var subStep = (StepConfig)step.Clone();
+                        var subContext = ctx.CreateChildContext(subStep);
+                        subContext.Log($"[并行] 启动: {t.subDesc}");
+                        return await t.action(subStep, subContext).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -495,10 +496,11 @@ namespace ZL.Gear.Core.Workflow
                 {
                     try
                     {
-                        // ctx.Log($"[并行] 启动: {t.subDesc}"); // 可选日志，太多分支可能会刷屏
+                        var subStep = (StepConfig)step.Clone();
+                        var subContext = ctx.CreateChildContext(subStep);
 
                         // 执行测量
-                        var measurement = await t.action(step, ctx).ConfigureAwait(false);
+                        var measurement = await t.action(subStep, subContext).ConfigureAwait(false);
 
                         // 3. 处理单个结果
                         if (measurement.Success)
@@ -577,7 +579,8 @@ namespace ZL.Gear.Core.Workflow
                 return finalResult; // 如果中途失败，直接返回失败结果
             }
             // 流程成功，使用聚合逻辑对收集到的测量结果做最终判断
-            var ms = _measurements.ToList();
+            // 按时间戳排序，消除 ConcurrentBag 无序枚举导致的结果顺序不确定性（报告/下游一致性）
+            var ms = _measurements.OrderBy(m => m.Timestamp).ToList();
 
             // 2. 智能校验
             // 只有当 (自动开启了严格模式 AND 结果为空) 时，才报错

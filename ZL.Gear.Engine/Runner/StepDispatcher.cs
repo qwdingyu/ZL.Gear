@@ -57,6 +57,11 @@ namespace ZL.Gear.Engine.Runner
         private readonly bool _enableUnknownCommandWarning;
 
         /// <summary>
+        /// 步骤未显式配置 TimeoutMs 时的默认超时（毫秒）。
+        /// </summary>
+        private readonly int _defaultTimeoutMs;
+
+        /// <summary>
         /// 命令 -> StepHandlerCommandAttribute 元数据缓存（用于 EvaluateResult 桥接）。
         /// </summary>
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StepHandlerCommandAttribute> _handlerMetadata = new();
@@ -74,14 +79,16 @@ namespace ZL.Gear.Engine.Runner
         /// <param name="actionService">动作注册表。</param>
         /// <param name="log">日志输出委托。</param>
         /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
-        public StepDispatcher(IActionRegistry actionService, Action<string> log, bool enableUnknownCommandWarning = true)
+        /// <param name="defaultTimeoutMs">步骤未显式配置 TimeoutMs 时的默认超时（毫秒），默认 30000；非正值回退默认。</param>
+        public StepDispatcher(IActionRegistry actionService, Action<string> log, bool enableUnknownCommandWarning = true, int defaultTimeoutMs = 30000)
             : this(
                 CreateDefaultLookup(log),
                 new DefaultStepHandlerFactory(),
                 actionService,
                 new StepPipelineBuilder().UseDefaultPipeline().Build(),
                 log,
-                enableUnknownCommandWarning)
+                enableUnknownCommandWarning,
+                defaultTimeoutMs)
         {
         }
 
@@ -94,6 +101,7 @@ namespace ZL.Gear.Engine.Runner
         /// <param name="pipeline">中间件执行管道。</param>
         /// <param name="log">日志输出委托。</param>
         /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
+        /// <param name="defaultTimeoutMs">步骤未显式配置 TimeoutMs 时的默认超时（毫秒），默认 30000；非正值回退默认。</param>
         /// <exception cref="ArgumentNullException">任意依赖项为 null。</exception>
         public StepDispatcher(
             IStepHandlerLookup handlerLookup,
@@ -101,7 +109,8 @@ namespace ZL.Gear.Engine.Runner
             IActionRegistry actionRegistry,
             StepExecutionPipeline pipeline,
             Action<string> log,
-            bool enableUnknownCommandWarning = true)
+            bool enableUnknownCommandWarning = true,
+            int defaultTimeoutMs = 30000)
         {
             _handlerLookup = handlerLookup ?? throw new ArgumentNullException(nameof(handlerLookup));
             _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
@@ -109,6 +118,7 @@ namespace ZL.Gear.Engine.Runner
             _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
             _log = log ?? (s => { });
             _enableUnknownCommandWarning = enableUnknownCommandWarning;
+            _defaultTimeoutMs = defaultTimeoutMs > 0 ? defaultTimeoutMs : 30000;
 
             // 注册框架内置的通用 Handler 与动作
             ModuleLoader.RegisterBuiltInHandlers(
@@ -295,6 +305,7 @@ namespace ZL.Gear.Engine.Runner
         {
             var loader = new ModuleLoader(this, _actionRegistry, _handlerFactory, _log);
             loader.Load(sources);
+            ValidateNoConflicts();
         }
 
         /// <summary>
@@ -366,7 +377,7 @@ namespace ZL.Gear.Engine.Runner
             }
 
             // 2. 设置本步骤的独立超时
-            using var stepTimeoutCts = new CancellationTokenSource(step.TimeoutMs > 0 ? step.TimeoutMs : 30000);
+            using var stepTimeoutCts = new CancellationTokenSource(step.TimeoutMs > 0 ? step.TimeoutMs : _defaultTimeoutMs);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, stepTimeoutCts.Token);
             var newContext = context.WithToken(linkedCts.Token);
 
