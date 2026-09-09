@@ -320,19 +320,6 @@ namespace ZL.Gear.Engine.Runner
             _log("测试总结");
             _log(runResult.Summary);
             _log("==================================================");
-            // 数据一致性验证
-            try
-            {
-                foreach (var stepResult in runResult.StepResults)
-                {
-                    stepResult.ValidateDataConsistency();
-                }
-                _log("[验证] 数据一致性检查通过");
-            }
-            catch (Exception ex)
-            {
-                _log($"[警告] 数据一致性检查失败: {ex.Message}");
-            }
 
             // 输出脚本自诊断报告
             _log(ZL.Gear.Engine.Runner.Middlewares.DiagnosticsMiddleware.GenerateReport());
@@ -561,7 +548,8 @@ namespace ZL.Gear.Engine.Runner
                         subResult.Outcome = StepOutcome.Error;
                         subResult.Message = "配置缺失";
 
-                        if (subConfig?.StopByFail == true)
+                        // subConfig 在 TryGetValue 失败时不可用；沿用父步骤 StopByFail 策略
+                        if (parentConfig.StopByFail)
                         {
                             break;
                         }

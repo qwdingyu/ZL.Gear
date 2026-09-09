@@ -134,29 +134,7 @@ namespace ZL.Gear.Core.StepHandler
                     .ToList();
             }
         }
-        /// <summary>
-        /// 验证数据一致性
-        /// </summary>
-        public void ValidateDataConsistency()
-        {
-            var expectedAllMeasurements = StepMeasurements
-                .Concat(SubStepResults.SelectMany(r => r.AllMeasurements))
-                .ToList();
 
-            var actualAllMeasurements = AllMeasurements;
-
-            if (actualAllMeasurements.Count != expectedAllMeasurements.Count)
-            {
-                throw new InvalidOperationException(
-                    $"StepRunResult 数据不一致: 期望 {expectedAllMeasurements.Count} 条测量数据，实际 {actualAllMeasurements.Count} 条");
-            }
-
-            // 验证所有子步骤的数据一致性
-            foreach (var subResult in SubStepResults)
-            {
-                subResult.ValidateDataConsistency();
-            }
-        }
         /// <summary>
          /// 递归地判断此步骤及其所有子步骤是否都成功（Passed 或 Skipped）。
          /// 这是判断整个分支成功与否的最佳方式。
@@ -166,6 +144,7 @@ namespace ZL.Gear.Core.StepHandler
             get
             {
                 // 1. 首先检查当前步骤自身的结果 -- 暂时不检测 中间节点（Group）
+                // GROUP 容器自身 Outcome 常为 NotEvaluated；成败由子步骤 IsBranchSuccessful 决定（有意分层，勿改成看容器 Outcome）
                 bool currentNodeSuccess =this.StepConfig.StepType?.ToUpper() =="GROUP" ? true:(this.Outcome == StepOutcome.Passed || this.Outcome == StepOutcome.Skipped);
                 // 2. 如果当前节点已经失败，整个分支都失败，无需检查子节点（短路优化）
                 if (!currentNodeSuccess)

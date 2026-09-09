@@ -63,9 +63,10 @@ namespace ZL.Gear.Engine.Runner.Middlewares
                 
                 return result;
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            catch (OperationCanceledException) when (
+                cts.IsCancellationRequested && !context.CancellationToken.IsCancellationRequested)
             {
-                // 超时触发
+                // 仅本中间件步骤超时（与 DispatchCore 对齐：外层取消不得被 TimeoutAction 吞掉）
                 _log($"[Timeout] 步骤 '{step.StepName}' 执行超时 ({timeoutMs}ms)!");
                 
                 if (timeoutAction.Equals("Fail", StringComparison.OrdinalIgnoreCase))
