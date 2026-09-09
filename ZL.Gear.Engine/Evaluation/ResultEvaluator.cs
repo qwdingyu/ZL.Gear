@@ -187,12 +187,6 @@ namespace ZL.Gear.Engine.Evaluation
                     case "contains":
                         return CheckString(spec, rawValue, mode);
 
-                    case "std_dev":
-                        return CheckStdDev(spec, rawValue);
-
-                    case "consecutive_pass":
-                        return CheckConsecutivePass(spec, rawValue);
-
                     case "has_value":
                         bool hasVal = rawValue != null && !string.IsNullOrWhiteSpace(rawValue.ToString());
                         return (hasVal,
@@ -329,7 +323,8 @@ namespace ZL.Gear.Engine.Evaluation
                     // 增加 try-catch 防止正则表达式格式错误导致崩
                     try
                     {
-                        var timeout = spec.RegexTimeoutSeconds > 0 ? TimeSpan.FromSeconds(spec.RegexTimeoutSeconds) : TimeSpan.FromSeconds(1);
+                        // 正则匹配超时固定 1s（配置化按 123 §8.2 延后，避免引入未消费字段）
+                        var timeout = TimeSpan.FromSeconds(1);
                         passed = Regex.IsMatch(strVal, expectedStr, RegexOptions.None, timeout);
                         desc = $"匹配正则 '{expectedStr}'";
                     }
@@ -344,37 +339,6 @@ namespace ZL.Gear.Engine.Evaluation
                 passed ? $"[PASS] {spec.Key}: '{strVal}' {desc}" : $"[FAIL] {spec.Key}: '{strVal}' 不满足 {desc}",
                 strVal);
         }
-
-        private static (bool, string, object) CheckStdDev(ExpectedSpec spec, object rawValue)
-        {
-            if (!double.TryParse(rawValue?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
-                return (false, $"[FAIL] {spec.Key}: '{rawValue}' 非数字", rawValue);
-
-            if (!spec.StdDevLimit.HasValue)
-                return (false, $"[FAIL] {spec.Key}: std_dev 模式未配置 StdDevLimit", rawValue);
-
-            // 这里采用简化实现：当次测量值与 0 比较标准差（实际统计应依赖批次样本）
-            double stdDev = Math.Abs(val);
-            bool passed = stdDev <= spec.StdDevLimit.Value;
-
-            return (passed,
-                passed ? $"[PASS] {spec.Key}: 标准差 {stdDev:F3} <= {spec.StdDevLimit}" : $"[FAIL] {spec.Key}: 标准差 {stdDev:F3} > {spec.StdDevLimit}",
-                val);
-        }
-
-        private static (bool, string, object) CheckConsecutivePass(ExpectedSpec spec, object rawValue)
-        {
-            if (!spec.ConsecutivePassCount.HasValue || spec.ConsecutivePassCount.Value <= 0)
-                return (false, $"[FAIL] {spec.Key}: consecutive_pass 模式未配置 ConsecutivePassCount", rawValue);
-
-            bool actualBool = ToBoolSafe(rawValue);
-            bool passed = actualBool;
-
-            return (passed,
-                passed ? $"[PASS] {spec.Key}: 连续通过计数 {spec.ConsecutivePassCount}（由上层维持样本窗口）" : $"[FAIL] {spec.Key}: 连续通过条件未满足",
-                rawValue);
-        }
-
         #endregion
 
         #region --- Helpers ---
