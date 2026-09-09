@@ -29,6 +29,10 @@ namespace ZL.Gear.Core.Workflow
         /// 流程级超时（毫秒），为空表示不启用流程级超时。
         /// </summary>
         private int? _workflowTimeoutMs;
+        /// <summary>
+        /// 流程级超时使用的 CancellationTokenSource，用于 DisposeAsync 时释放。
+        /// </summary>
+        private CancellationTokenSource _workflowTimeoutCts;
 
         private MicroWorkflow(StepConfig step, StepContext context)
         {
@@ -62,7 +66,7 @@ namespace ZL.Gear.Core.Workflow
             if (workflowTimeoutMs > 0)
             {
                 workflow._workflowTimeoutMs = workflowTimeoutMs;
-                workflow._context = workflow._context.WithToken(CreateWorkflowTimeoutToken(context, workflowTimeoutMs));
+                workflow._context = workflow._context.WithToken(CreateWorkflowTimeoutToken(workflow, context, workflowTimeoutMs));
             }
 
             return workflow;
@@ -71,9 +75,10 @@ namespace ZL.Gear.Core.Workflow
         /// <summary>
         /// 为流程级超时创建链接令牌，不覆盖原始上下文令牌。
         /// </summary>
-        private static CancellationToken CreateWorkflowTimeoutToken(StepContext context, int workflowTimeoutMs)
+        private static CancellationToken CreateWorkflowTimeoutToken(MicroWorkflow workflow, StepContext context, int workflowTimeoutMs)
         {
             var workflowTimeoutCts = new CancellationTokenSource(workflowTimeoutMs);
+            workflow._workflowTimeoutCts = workflowTimeoutCts;
             return CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, workflowTimeoutCts.Token).Token;
         }
 
@@ -393,7 +398,7 @@ namespace ZL.Gear.Core.Workflow
 
             _workflowTimeoutMs = timeoutMs;
             // 替换当前上下文令牌，链接原令牌与流程级超时令牌
-            _context = _context.WithToken(CreateWorkflowTimeoutToken(_context, timeoutMs));
+            _context = _context.WithToken(CreateWorkflowTimeoutToken(this, _context, timeoutMs));
             return this;
         }
 
@@ -546,8 +551,12 @@ namespace ZL.Gear.Core.Workflow
             // 流程级超时保护：使用 Task.WhenAny 确保即使执行链内部未观察令牌也能被整体超时兜底
             if (_workflowTimeoutMs.HasValue)
             {
-                using var workflowTimeoutCts = new CancellationTokenSource(_workflowTimeoutMs.Value);
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_context.CancellationToken, workflowTimeoutCts.Token);
+                if (_workflowTimeoutCts == null)
+                {
+                    _workflowTimeoutCts = new CancellationTokenSource(_workflowTimeoutMs.Value);
+                }
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_context.CancellationToken, _workflowTimeoutCts.Token);
 
                 var chainTask = _executionChain;
                 var delayTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
@@ -610,7 +619,16 @@ namespace ZL.Gear.Core.Workflow
             }
             catch
             {
-                // 忽略主流程等待的异常，确保 Finally 能运行 
+                // 忽略主流程等待的异常，确保 Finally 能运行
+            }
+            finally
+            {
+                // 释放流程级超时使用的 CancellationTokenSource
+                if (_workflowTimeoutCts != null)
+                {
+                    _workflowTimeoutCts.Dispose();
+                    _workflowTimeoutCts = null;
+                }
             }
 
             foreach (var cleanupAction in _cleanupActions)
