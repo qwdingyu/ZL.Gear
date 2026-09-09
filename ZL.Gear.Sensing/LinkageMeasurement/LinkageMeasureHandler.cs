@@ -135,6 +135,11 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
                 var startCondition = ParseCondition(samplingConfig.Trigger?.StartCondition ?? "");
                 var stopCondition = ParseCondition(samplingConfig.Trigger?.StopCondition ?? "");
 
+                var samples = new List<double>();
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
+                var started = false;
+                var sampleIndex = 0;
+
                 using var sampler = new DeviceSampler<double>(
                     stepName,
                     device,
@@ -144,53 +149,49 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
                     TimeSpan.FromMilliseconds(samplingConfig.SampleIntervalMs)
                 );
 
-                var samples = new List<double>();
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
-                var started = false;
-                var sampleIndex = 0;
+                // 关键修复：先订阅数据流，再启动采样，避免丢失初始样本
+                var subscription = sampler.DataStream.Subscribe(m =>
+                {
+                    try
+                    {
+                        if (cts.Token.IsCancellationRequested) return;
+                        if (!m.Success || m.Value == null) return;
 
-                sampler.Start();
+                        var value = (double)m.Value;
+                        samples.Add(value);
+                        sampleIndex++;
+                        _log($"[主步骤] {stepName} 采样值[{sampleIndex}]: {value}");
+
+                        if (!started && startCondition(value))
+                        {
+                            started = true;
+                            _log($"[主步骤] {stepName} 条件满足，发送信号...");
+                            signals.StartSignal.TrySetResult(true);
+                            context.Variables.Set(step.MeasurementKey ?? "current_value", value);
+                        }
+
+                        if (started && stopCondition(value))
+                        {
+                            _log($"[主步骤] {stepName} 停止条件满足");
+                            signals.EndSignalCts?.Cancel();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log($"[主步骤] 处理采样数据错误: {ex.Message}");
+                    }
+                });
 
                 try
                 {
-                    sampler.DataStream.Subscribe(m =>
-                    {
-                        try
-                        {
-                            if (cts.Token.IsCancellationRequested) return;
-                            if (!m.Success || m.Value == null) return;
-
-                            var value = (double)m.Value;
-                            samples.Add(value);
-                            sampleIndex++;
-                            _log($"[主步骤] {stepName} 采样值[{sampleIndex}]: {value}");
-
-                            if (!started && startCondition(value))
-                            {
-                                started = true;
-                                _log($"[主步骤] {stepName} 条件满足，发送信号...");
-                                signals.StartSignal.TrySetResult(true);
-                                context.Variables.Set(step.MeasurementKey ?? "current_value", value);
-                            }
-
-                            if (started && stopCondition(value))
-                            {
-                                _log($"[主步骤] {stepName} 停止条件满足");
-                                signals.EndSignalCts?.Cancel();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _log($"[主步骤] 处理采样数据错误: {ex.Message}");
-                        }
-                    });
-
+                    sampler.Start();
                     await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, cts.Token);
                     signals.EndSignalCts?.Cancel();
                 }
                 finally
                 {
                     sampler.Stop();
+                    subscription.Dispose();
                 }
 
                 if (started)
