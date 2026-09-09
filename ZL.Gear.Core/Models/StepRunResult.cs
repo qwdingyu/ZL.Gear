@@ -108,12 +108,6 @@ namespace ZL.Gear.Core.StepHandler
         public List<StepRunResult> SubStepResults { get; } = new List<StepRunResult>();
 
         /// <summary>
-        /// 统一的执行结果对象，用于替代或补充原有的 Status/Outcome/Message 字段。
-        /// 这是迈向纯 DTO 模型的中间步骤。
-        /// </summary>
-        public ExecutionResultBase ExecutionResult { get; set; }
-        
-        /// <summary>
         /// 扩展元数据，用于存储步骤特定的运行数据（如传感器原始状态等）
         /// </summary>
         public Dictionary<string, object> Metadata { get; set; } = new();

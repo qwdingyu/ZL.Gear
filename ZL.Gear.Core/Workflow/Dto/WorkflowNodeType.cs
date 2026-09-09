@@ -13,6 +13,6 @@
         Retry,              // 异常重试包装
         Sequence,           // 顺序执行序列 (容器)
         WaitUntil,          // 条件轮询等待
-        Group               // 视觉/逻辑分组
+        Group               // DSL 视觉/逻辑分组别名；运行时与 Sequence 同（扁平展开 Children）
     }
 }

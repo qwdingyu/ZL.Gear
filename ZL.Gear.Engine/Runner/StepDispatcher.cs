@@ -388,7 +388,7 @@ namespace ZL.Gear.Engine.Runner
                 timeoutMs = paramTimeout;
             }
 
-            // TimeoutAction：Fail（默认，返回失败）/ Continue（记超时但仍 Success，工业场景慎用）
+            // TimeoutAction：Fail（默认 Failed）/ Continue（仍 Failed 带 [TimeoutContinue]，StopByFail 不掐断；防误 PASS）
             string timeoutAction = "Fail";
             if (step.Parameters != null && step.Parameters.TryGetValue("TimeoutAction", out var timeoutActionObj))
             {
@@ -429,14 +429,16 @@ namespace ZL.Gear.Engine.Runner
                 _log($"[Timeout] 步骤 '{step.StepName}' 执行超时 ({timeoutMs}ms), TimeoutAction={timeoutAction}");
                 if (string.Equals(timeoutAction, "Continue", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Continue：不中断序列，但测量为空——后续 Verify 仍可能因缺数据失败（偏安全）
-                    return ExecutionResult<List<Measurement>>.Succeeded(
-                        new List<Measurement>(),
-                        0,
-                        $"步骤执行超时 ({timeoutMs}ms)");
+                    // Continue：不中断序列的意图由执行器结合 StopByFail 理解；
+                    // 此处必须返回 Failed，避免 EvaluateResult=false / Execute 把空测量当成 PASS（防漏检）。
+                    return ExecutionResult<List<Measurement>>.Failed(
+                        $"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)",
+                        new List<Measurement>());
                 }
 
-                return ExecutionResult<List<Measurement>>.Failed($"步骤执行超时 ({timeoutMs}ms)");
+                return ExecutionResult<List<Measurement>>.Failed(
+                    $"步骤执行超时 ({timeoutMs}ms)",
+                    new List<Measurement>());
             }
             catch (OperationCanceledException)
             {

@@ -76,12 +76,11 @@ namespace ZL.Gear.Engine.Runner.Middlewares
                 }
                 else
                 {
-                    // Continue 模式下记录警告但继续执行
-                    _log($"[Timeout] 步骤 '{step.StepName}' 超时但配置为继续执行");
-                    return ExecutionResult<List<Measurement>>.Succeeded(
-                        new List<Measurement>(),
-                        0,
-                        $"步骤执行超时 ({timeoutMs}ms)");
+                    // 与 DispatchCore 对齐：Continue 仍返回 Failed（防误 PASS），由执行器结合 StopByFail 决定是否中止序列
+                    _log($"[Timeout] 步骤 '{step.StepName}' 超时且 TimeoutAction=Continue（记失败，是否中止由 StopByFail 决定）");
+                    return ExecutionResult<List<Measurement>>.Failed(
+                        $"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)",
+                        new List<Measurement>());
                 }
             }
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)

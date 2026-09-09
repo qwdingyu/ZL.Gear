@@ -188,6 +188,8 @@ namespace ZL.Gear.Engine
                     break;
 
                 case WorkflowNodeType.Sequence:
+                case WorkflowNodeType.Group:
+                    // Group 是 DSL 视觉/逻辑分组别名，运行时与 Sequence 相同：扁平展开 Children
                     if (node.Children != null)
                     {
                         foreach (var child in node.Children) BuildNode(flow, child, ctx);
@@ -231,7 +233,9 @@ namespace ZL.Gear.Engine
                     break;
 
                 case WorkflowNodeType.Parallel:
-                    // Parallel 只承载「无测量载荷」的动作；Measure / 纯测量 ActionKey 必须走 ParallelMeasure。
+                    // Parallel 只承载「无测量载荷」的动作分支（或 Sequence/Group 容器）。
+                    // 注意：容器内 Measure 的结果在子 MicroWorkflow 内裁决，默认不汇入父 _measurements；
+                    // 跨分支数据请用 OutputKey→Variables；父步骤 Verify 请用 ParallelMeasure 或显式汇总。
                     if (node.Children != null && node.Children.Count > 0)
                     {
                         if (TryGetIllegalParallelChild(node.Children, ctx.ActionResolver, out var illegalReason))
@@ -262,13 +266,6 @@ namespace ZL.Gear.Engine
 
                         var parallelTasks = node.Children.Select(child => (child.Description, WrapMeasurementWithArgs(child, ctx.ActionResolver))).ToArray();
                         flow.ParallelMeasure(node.Description, parallelTasks);
-                    }
-                    break;
-
-                case WorkflowNodeType.Group:
-                    if (node.Children != null)
-                    {
-                        foreach (var child in node.Children) BuildNode(flow, child, ctx);
                     }
                     break;
             }

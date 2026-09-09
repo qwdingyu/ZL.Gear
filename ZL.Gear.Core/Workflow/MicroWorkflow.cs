@@ -564,12 +564,15 @@ namespace ZL.Gear.Core.Workflow
             // 流程级超时保护：使用 Task.WhenAny 确保即使执行链内部未观察令牌也能被整体超时兜底
             if (_workflowTimeoutMs.HasValue)
             {
-                if (_workflowTimeoutCts == null)
+                // 边缘路径：仅设置了毫秒数却未建 CTS 时，统一走 CreateWorkflowTimeoutToken（含 Linked CTS）
+                if (_workflowTimeoutCts == null || _workflowLinkedCts == null)
                 {
-                    _workflowTimeoutCts = new CancellationTokenSource(_workflowTimeoutMs.Value);
+                    _context = _context.WithToken(CreateWorkflowTimeoutToken(this, _context, _workflowTimeoutMs.Value));
                 }
 
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_context.CancellationToken, _workflowTimeoutCts.Token);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    _context.CancellationToken,
+                    _workflowTimeoutCts.Token);
 
                 var chainTask = _executionChain;
                 var delayTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
@@ -577,6 +580,22 @@ namespace ZL.Gear.Core.Workflow
                 var completed = await Task.WhenAny(chainTask, delayTask).ConfigureAwait(false);
                 if (completed == delayTask)
                 {
+                    // 超时已触发：再次确保取消信号发出，促使观察了 Token 的步骤尽快退出
+                    try
+                    {
+                        if (_workflowTimeoutCts != null && !_workflowTimeoutCts.IsCancellationRequested)
+                        {
+                            _workflowTimeoutCts.Cancel();
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Dispose 竞态下忽略
+                    }
+
+                    Log?.Invoke(
+                        $"[MicroWorkflow] 流程级超时 ({_workflowTimeoutMs.Value}ms)：已取消令牌。" +
+                        "后续步骤必须观察 CancellationToken，否则设备动作可能仍短暂执行直至 Dispose。");
                     return ExecutionResult.Failed($"MicroWorkflow 流程级超时 ({_workflowTimeoutMs.Value}ms)。");
                 }
 

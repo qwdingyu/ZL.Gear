@@ -256,8 +256,12 @@ namespace ZL.Gear.Engine.Runner
                         ApplyProfileToStepTree(stepConfig, profileStrDict);
                         await ExecuteStepRecursiveAsync(stepConfig, topLevelStepResult, context);
 
-                        // c检查是否需要提前终止
-                        if (topLevelStepResult.Outcome != StepOutcome.Passed && topLevelStepResult.Outcome != StepOutcome.Skipped && stepConfig.StopByFail)
+                        // 检查是否需要提前终止
+                        // TimeoutAction=Continue 的步骤记 Failed 防误 PASS，但不因 StopByFail 掐断整线
+                        if (topLevelStepResult.Outcome != StepOutcome.Passed
+                            && topLevelStepResult.Outcome != StepOutcome.Skipped
+                            && stepConfig.StopByFail
+                            && !IsTimeoutContinueMessage(topLevelStepResult.Message))
                         {
                             _log($"[警告] 因步骤 '{stepConfig.StepName}' 未通过且设置了 StopByFail，测试提前终止。");
                             testWasStoppedByFail = true;
@@ -270,10 +274,7 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     runResult.EndTime = DateTime.Now;
-                    // 5. 最终判定
-                    // 如果所有顶层步骤都通过或被跳过，则总体成功
-                    //runResult.OverallSuccess = runResult.StepResults.All(r => r.Outcome == StepOutcome.Passed || r.Outcome == StepOutcome.Skipped);
-                    runResult.OverallSuccess = runResult.StepResults.All(r => r.IsBranchSuccessful);
+                    // OverallSuccess 权威写入在 try/finally 之后（带 StopByFail/空列表保护），此处不抢先赋值
                 }
             }
             catch (OperationCanceledException)
@@ -545,7 +546,10 @@ namespace ZL.Gear.Engine.Runner
                         await ExecuteStepRecursiveAsync(clonedConfig, subResult, subContext);
 
                         // 如果子步骤失败且设置了StopByFail，则不再继续执行后续的兄弟步骤
-                        if (subResult.Outcome != StepOutcome.Passed && clonedConfig.StopByFail)
+                        // [TimeoutContinue] 超时软失败：记 Failed 但不中断兄弟步骤
+                        if (subResult.Outcome != StepOutcome.Passed
+                            && clonedConfig.StopByFail
+                            && !IsTimeoutContinueMessage(subResult.Message))
                         {
                             _log($"[停止] 因步骤 '{clonedConfig.StepName}' 失败且设置了 StopByFail，停止执行后续兄弟步骤");
                             break;
@@ -764,6 +768,15 @@ namespace ZL.Gear.Engine.Runner
                     ApplyProfileToStepTree(sub, profile);
                 }
             }
+        }
+
+        /// <summary>
+        /// 判断是否为 TimeoutAction=Continue 产生的软失败消息（步骤记失败，但不应触发 StopByFail 掐断）。
+        /// </summary>
+        private static bool IsTimeoutContinueMessage(string message)
+        {
+            return !string.IsNullOrEmpty(message)
+                && message.IndexOf("[TimeoutContinue]", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>
