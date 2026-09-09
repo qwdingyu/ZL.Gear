@@ -538,27 +538,29 @@ namespace ZL.Gear.Core.Workflow
         /// </summary>
         public async Task<ExecutionResultBase> GetResultAsync()
         {
-            // 如果设置了流程级超时，则等待执行链时增加整体超时保护
+            return await GetResultAsyncInternal().ConfigureAwait(false);
+        }
+
+        private async Task<ExecutionResultBase> GetResultAsyncInternal()
+        {
+            // 流程级超时保护：使用 Task.WhenAny 确保即使执行链内部未观察令牌也能被整体超时兜底
             if (_workflowTimeoutMs.HasValue)
             {
                 using var workflowTimeoutCts = new CancellationTokenSource(_workflowTimeoutMs.Value);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_context.CancellationToken, workflowTimeoutCts.Token);
 
-                try
-                {
-                    return await GetResultAsyncInternal(linkedCts.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
+                var chainTask = _executionChain;
+                var delayTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
+
+                var completed = await Task.WhenAny(chainTask, delayTask).ConfigureAwait(false);
+                if (completed == delayTask)
                 {
                     return ExecutionResult.Failed($"MicroWorkflow 流程级超时 ({_workflowTimeoutMs.Value}ms)。");
                 }
+
+                return await chainTask;
             }
 
-            return await GetResultAsyncInternal(CancellationToken.None).ConfigureAwait(false);
-        }
-
-        private async Task<ExecutionResultBase> GetResultAsyncInternal(CancellationToken cancellationToken)
-        {
             var finalResult = await _executionChain.ConfigureAwait(false);
             if (!finalResult.Success)
             {
