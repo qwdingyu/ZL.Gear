@@ -90,19 +90,9 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             }
 
             // 判断是否通过
+            // All 模式：所有条件都满足才通过
+            // Any 模式：任意一个条件满足就通过
             bool passed = checkMode.Equals("Any", StringComparison.OrdinalIgnoreCase)
-                ? failedConditions.Count == 0  // Any 模式：有一个失败就不通过
-                : failedConditions.Count == conditionList.Count;  // All 模式：全部失败才不通过（这个逻辑有点反直觉，让我修正）
-            
-            // 实际上应该是：
-            // - All 模式：所有条件都满足才通过
-            // - Any 模式：任意一个条件满足就通过（不常见）
-            // 让我重新理解：
-            // - All：所有条件都必须满足（默认）
-            // - Any：任意一个满足即可（这个检查的是"或"关系，不常见）
-            
-            // 修正逻辑：
-            passed = checkMode.Equals("Any", StringComparison.OrdinalIgnoreCase)
                 ? failedConditions.Count < conditionList.Count  // Any：至少一个通过
                 : failedConditions.Count == 0;  // All：全部通过
 

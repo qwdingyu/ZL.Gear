@@ -282,26 +282,27 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
 
                 sampler.Start();
 
+                var subscription = sampler.DataStream.Subscribe(
+                    m => {
+                        if (context.CancellationToken.IsCancellationRequested) return;
+                        if (!m.Success || m.Value == null) return;
+
+                        var value = (double)m.Value;
+                        samples.Add(value);
+                        sampleIndex++;
+                        _log($"[从步骤] {stepName} 采样值[{sampleIndex}]: {value}");
+                    },
+                    ex => _log($"[从步骤] 采样错误: {ex.Message}")
+                );
+
                 try
                 {
-                    sampler.DataStream.Subscribe(
-                        m => {
-                            if (context.CancellationToken.IsCancellationRequested) return;
-                            if (!m.Success || m.Value == null) return;
-
-                            var value = (double)m.Value;
-                            samples.Add(value);
-                            sampleIndex++;
-                            _log($"[从步骤] {stepName} 采样值[{sampleIndex}]: {value}");
-                        },
-                        ex => _log($"[从步骤] 采样错误: {ex.Message}")
-                    );
-
                     await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, context.CancellationToken);
                 }
                 finally
                 {
                     sampler.Stop();
+                    subscription.Dispose();
                 }
 
                 if (samples.Count > 0)
