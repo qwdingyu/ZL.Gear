@@ -29,18 +29,18 @@ namespace ZL.Gear.Core.Infrastructure
             if (lookup.TryGetHandler(step, out var handler))
             {
                 var checker = handler as IStepHandlerHealthCheck ?? new DefaultStepHandlerHealthCheck(handler);
-                return await checker.CheckHealthAsync(cancellationToken);
+                return await checker.CheckHealthAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (lookup.TryGetTemplateHandler(step, out var templateHandler))
             {
                 var checker = templateHandler as IStepHandlerHealthCheck ?? new DefaultStepHandlerHealthCheck(templateHandler);
-                return await checker.CheckHealthAsync(cancellationToken);
+                return await checker.CheckHealthAsync(cancellationToken).ConfigureAwait(false);
             }
 
             var fallbackHandler = lookup.GetFallbackHandler(step);
             var fallbackChecker = fallbackHandler as IStepHandlerHealthCheck ?? new DefaultStepHandlerHealthCheck(fallbackHandler);
-            return await fallbackChecker.CheckHealthAsync(cancellationToken);
+            return await fallbackChecker.CheckHealthAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

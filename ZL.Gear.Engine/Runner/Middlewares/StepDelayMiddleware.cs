@@ -46,18 +46,18 @@ namespace ZL.Gear.Engine.Runner.Middlewares
                 if (actualDelayBefore > 0)
                 {
                     _log($"[Delay] 步骤 '{step.StepName}' 执行前等待 {actualDelayBefore}ms");
-                    await Task.Delay(actualDelayBefore, context.CancellationToken);
+                    await Task.Delay(actualDelayBefore, context.CancellationToken).ConfigureAwait(false);
                 }
             }
 
             // 执行步骤
-            var result = await next(step, context);
+            var result = await next(step, context).ConfigureAwait(false);
 
             // 执行后延迟
             if (delayAfterMs > 0)
             {
                 _log($"[Delay] 步骤 '{step.StepName}' 执行后等待 {delayAfterMs}ms");
-                await Task.Delay(delayAfterMs, context.CancellationToken);
+                await Task.Delay(delayAfterMs, context.CancellationToken).ConfigureAwait(false);
             }
 
             return result;

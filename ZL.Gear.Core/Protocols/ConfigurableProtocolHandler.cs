@@ -71,7 +71,7 @@ namespace ZL.Gear.Core.Protocols
                 var diff = (DateTime.Now - _lastExecutionTime).TotalMilliseconds;
                 if (diff < waitMs)
                 {
-                    await Task.Delay((int)(waitMs - diff), token);
+                    await Task.Delay((int)(waitMs - diff), token).ConfigureAwait(false);
                 }
             }
 
@@ -104,13 +104,13 @@ namespace ZL.Gear.Core.Protocols
                 dataToSend = System.Text.Encoding.ASCII.GetBytes(commandToSend);
             }
 
-            await transport.SendAsync(dataToSend, token);
+            await transport.SendAsync(dataToSend, token).ConfigureAwait(false);
             _lastExecutionTime = DateTime.Now;
 
             // 等待 (Wait if needed)
-            if (cmdDef.WaitAfterMs > 0) 
+            if (cmdDef.WaitAfterMs > 0)
             {
-                await Task.Delay(cmdDef.WaitAfterMs, token);
+                await Task.Delay(cmdDef.WaitAfterMs, token).ConfigureAwait(false);
             }
 
             string rawResponse = null;
@@ -126,7 +126,7 @@ namespace ZL.Gear.Core.Protocols
                      int totalRead = 0;
                      while(totalRead < len)
                      {
-                         int read = await transport.ReceiveAsync(buf, totalRead, len - totalRead, token);
+                         int read = await transport.ReceiveAsync(buf, totalRead, len - totalRead, token).ConfigureAwait(false);
                          if(read == 0) break;
                          totalRead += read;
                      }
@@ -143,7 +143,7 @@ namespace ZL.Gear.Core.Protocols
                     }
                     else
                     {
-                        chunk = await transport.ReceiveAsync(token);
+                        chunk = await transport.ReceiveAsync(token).ConfigureAwait(false);
                     }
                     
                     if (chunk != null && chunk.Length > 0)
@@ -167,7 +167,7 @@ namespace ZL.Gear.Core.Protocols
 
                         if (foundIdx == -1)
                         {
-                            byte[] chunk = await transport.ReceiveAsync(token);
+                            byte[] chunk = await transport.ReceiveAsync(token).ConfigureAwait(false);
                             if (chunk != null && chunk.Length > 0)
                             {
                                 _receiveBuffer.AddRange(chunk);
@@ -176,7 +176,7 @@ namespace ZL.Gear.Core.Protocols
                             }
                             else
                             {
-                                await Task.Delay(5, token); // 没读到，稍等
+                                await Task.Delay(5, token).ConfigureAwait(false); // 没读到，稍等
                             }
                         }
                     }

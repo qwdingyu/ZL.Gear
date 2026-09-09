@@ -47,7 +47,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             Func<StepConfig, StepContext, Task<ExecutionResult<List<Measurement>>>> next)
         {
             var startTime = DateTime.Now;
-            var result = await next(step, context);
+            var result = await next(step, context).ConfigureAwait(false);
             var endTime = DateTime.Now;
             var duration = (endTime - startTime).TotalMilliseconds;
 

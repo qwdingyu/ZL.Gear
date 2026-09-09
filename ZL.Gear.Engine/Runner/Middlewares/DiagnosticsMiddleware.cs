@@ -45,7 +45,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             ExecutionResult<List<Measurement>> result;
             try
             {
-                result = await next(step, context);
+                result = await next(step, context).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

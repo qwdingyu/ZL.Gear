@@ -27,7 +27,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
             try
             {
-                var result = await next(step, context);
+                var result = await next(step, context).ConfigureAwait(false);
                 sw.Stop();
 
                 _log($"[Pipeline] 步骤 {step.StepName} 执行完毕. 耗时: {sw.ElapsedMilliseconds}ms, 结果: {(result.Success ? "Pass" : "Fail")}");

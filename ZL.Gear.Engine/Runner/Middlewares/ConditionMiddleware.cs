@@ -42,7 +42,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
                 }
             }
 
-            return await next(step, context);
+            return await next(step, context).ConfigureAwait(false);
         }
     }
 }

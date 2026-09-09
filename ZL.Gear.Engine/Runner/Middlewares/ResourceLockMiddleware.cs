@@ -17,10 +17,10 @@ namespace ZL.Gear.Engine.Runner.Middlewares
         public async Task<ExecutionResult<List<Measurement>>> InvokeAsync(StepConfig step, StepContext context, Func<StepConfig, StepContext, Task<ExecutionResult<List<Measurement>>>> next)
         {
             // 如果步骤没有目标设备，或者显式标记为不加锁，则直接跳过
-            if (string.IsNullOrEmpty(step.Target) || 
+            if (string.IsNullOrEmpty(step.Target) ||
                 (step.Parameters != null && step.Parameters.TryGetValue("SkipLock", out var sl) && sl.ToString().ToLower() == "true"))
             {
-                return await next(step, context);
+                return await next(step, context).ConfigureAwait(false);
             }
 
             // 默认等待锁超时 10 秒
@@ -33,10 +33,10 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             try
             {
                 // 获取设备排他锁
-                using (await DeviceLockManager.LockAsync(step.Target, lockTimeout, context.CancellationToken))
+                using (await DeviceLockManager.LockAsync(step.Target, lockTimeout, context.CancellationToken).ConfigureAwait(false))
                 {
                     context.Log($"[Lock] 已获得设备 '{step.Target}' 的排他锁。");
-                    return await next(step, context);
+                    return await next(step, context).ConfigureAwait(false);
                 }
             }
             catch (TimeoutException ex)

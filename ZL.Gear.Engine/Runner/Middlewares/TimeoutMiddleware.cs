@@ -52,7 +52,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             {
                 _log($"[Timeout] 步骤 '{step.StepName}' 开始执行，超时限制: {timeoutMs}ms");
                 
-                var result = await next(step, linkedContext);
+                var result = await next(step, linkedContext).ConfigureAwait(false);
                 
                 return result;
             }

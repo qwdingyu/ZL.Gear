@@ -29,7 +29,7 @@ namespace ZL.Gear.Core.Devices
         public static async Task<IDisposable> LockAsync(string deviceCode, int timeoutMs, CancellationToken token)
         {
             var semaphore = GetLock(deviceCode);
-            bool acquired = await semaphore.WaitAsync(timeoutMs, token);
+            bool acquired = await semaphore.WaitAsync(timeoutMs, token).ConfigureAwait(false);
             
             if (!acquired)
             {

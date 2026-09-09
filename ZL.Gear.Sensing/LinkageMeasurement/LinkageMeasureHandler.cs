@@ -33,11 +33,11 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
 
             if (isMaster)
             {
-                return await ExecuteAsMasterAsync(step, context);
+                return await ExecuteAsMasterAsync(step, context).ConfigureAwait(false);
             }
             else if (!string.IsNullOrEmpty(dependsOn))
             {
-                return await ExecuteAsDependentAsync(step, context);
+                return await ExecuteAsDependentAsync(step, context).ConfigureAwait(false);
             }
 
             return ExecutionResult.Failed("LinkageMeasure 需要指定 IsMaster=true 或 DependsOn=主步骤Key");
@@ -185,7 +185,7 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
                 try
                 {
                     sampler.Start();
-                    await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, cts.Token);
+                    await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, cts.Token).ConfigureAwait(false);
                     signals.EndSignalCts?.Cancel();
                 }
                 finally
@@ -237,11 +237,16 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
                 var waitTask = signals.StartSignal.Task;
                 var delayTask = Task.Delay(timeoutMs, context.CancellationToken);
 
-                var completedTask = await Task.WhenAny(waitTask, delayTask);
+                var completedTask = await Task.WhenAny(waitTask, delayTask).ConfigureAwait(false);
 
                 if (completedTask == delayTask)
                 {
                     return ExecutionResult.Failed($"[从步骤] 等待主步骤信号超时 ({timeoutMs}ms)");
+                }
+
+                if (waitTask.IsFaulted)
+                {
+                    return ExecutionResult.Failed("[从步骤] 等待主步骤信号时发生内部异常。");
                 }
 
                 if (!waitTask.Result)
@@ -297,7 +302,7 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
 
                 try
                 {
-                    await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, context.CancellationToken);
+                    await Task.Delay(samplingConfig.SampleCount * samplingConfig.SampleIntervalMs + 500, context.CancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {

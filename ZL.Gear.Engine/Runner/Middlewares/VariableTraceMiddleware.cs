@@ -20,7 +20,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             // 拍摄执行前的变量快照
             var before = context.Variables.AsDictionary().ToDictionary(k => k.Key, v => v.Value);
 
-            var result = await next(step, context);
+            var result = await next(step, context).ConfigureAwait(false);
 
             // 拍摄执行后的变量快照
             var after = context.Variables.AsDictionary();

@@ -84,7 +84,7 @@ namespace ZL.Gear.Sensing.Orchestration
 
             try
             {
-                var result = await engine.ExecuteAsync(dataStream, samplingConfig, token);
+                var result = await engine.ExecuteAsync(dataStream, samplingConfig, token).ConfigureAwait(false);
 
                 // 6. 转换结果
                 if (result.IsSuccess)

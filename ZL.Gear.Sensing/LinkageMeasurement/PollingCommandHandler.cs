@@ -38,12 +38,12 @@ namespace ZL.Gear.Sensing.LinkageMeasurement
         {
             if (command.Equals("StartListening", StringComparison.OrdinalIgnoreCase))
             {
-                return await _device.StartListeningAsync(args);
+                return await _device.StartListeningAsync(args).ConfigureAwait(false);
             }
 
             if (command.Equals("StopListening", StringComparison.OrdinalIgnoreCase))
             {
-                await _device.StopListeningAsync();
+                await _device.StopListeningAsync().ConfigureAwait(false);
                 return ExecutionResult.Succeeded();
             }
 

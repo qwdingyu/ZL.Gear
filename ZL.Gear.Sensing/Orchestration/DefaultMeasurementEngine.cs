@@ -116,7 +116,7 @@ namespace ZL.Gear.Sensing.Orchestration
             {
                 using (linkedCts.Token.Register(() => tcs.TrySetCanceled()))
                 {
-                    return await tcs.Task;
+                    return await tcs.Task.ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)

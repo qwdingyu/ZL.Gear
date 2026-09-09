@@ -34,8 +34,8 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
             do
             {
-                result = await next(step, context);
-                
+                result = await next(step, context).ConfigureAwait(false);
+
                 if (result.Success || attempt >= retryCount)
                 {
                     break;
@@ -43,10 +43,10 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
                 attempt++;
                 context.Log($"[Retry] 步骤 '{step.StepName}' 环境不稳定导致失败。正在进行第 {attempt}/{retryCount} 次重试，等待 {retryDelayMs}ms...");
-                
+
                 try
                 {
-                    await Task.Delay(retryDelayMs, context.CancellationToken);
+                    await Task.Delay(retryDelayMs, context.CancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

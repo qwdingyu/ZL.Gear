@@ -83,10 +83,16 @@ namespace ZL.Gear.Sensing.Orchestration
                     _log($"[{stepName}] 等待主步骤 '{signals.Key}' 的开始信号...");
 
                     // 等待开始信号，同时受全局取消和步骤超时的影响
-                    var waitTask = await Task.WhenAny(signals.StartSignal.Task, Task.Delay(timeoutMs, executionToken));
+                    var waitTask = await Task.WhenAny(signals.StartSignal.Task, Task.Delay(timeoutMs, executionToken)).ConfigureAwait(false);
 
                     if (executionToken.IsCancellationRequested) return ExecutionResult.Failed("操作被全局取消。");
-                    if (waitTask != signals.StartSignal.Task || !signals.StartSignal.Task.Result)
+                    if (waitTask != signals.StartSignal.Task)
+                        return ExecutionResult.Failed($"等待主步骤启动信号失败或超时 ({timeoutMs}ms)。");
+
+                    if (signals.StartSignal.Task.IsFaulted)
+                        return ExecutionResult.Failed("等待主步骤启动信号时发生内部异常。");
+
+                    if (!signals.StartSignal.Task.Result)
                         return ExecutionResult.Failed($"等待主步骤启动信号失败或超时 ({timeoutMs}ms)。");
 
                     _log($"[{stepName}] 收到开始信号，测试启动！");
@@ -102,7 +108,7 @@ namespace ZL.Gear.Sensing.Orchestration
 
                 // --- 执行核心测量任务 ---
                 // 无论是哪种场景，最终都会调用 IMeasurable.MeasureAsync
-                return await config.Measurable.MeasureAsync(executionToken);
+                return await config.Measurable.MeasureAsync(executionToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

@@ -56,9 +56,27 @@ namespace ZL.Gear.Sensing.Samplers
 
         public void Stop()
         {
-            _cts?.Cancel();
+            if (_cts == null) return;
+
+            _cts.Cancel();
+
+            // 等待后台采样循环安全退出，避免 Stop() 返回后任务仍在写入 _output
+            var task = _loopTask;
             _cts = null;
             _loopTask = null;
+
+            if (task != null)
+            {
+                try
+                {
+                    // 最多等待 5 秒，避免异常卡死
+                    task.Wait(5000);
+                }
+                catch (AggregateException ex)
+                {
+                    _log($"[DeviceSampler] 停止采样时发生异常: {ex.InnerException?.Message}");
+                }
+            }
         }
 
         private async Task SampleLoop(CancellationToken token)
@@ -68,7 +86,7 @@ namespace ZL.Gear.Sensing.Samplers
                 try
                 {
                     // 调用设备的 ExecuteAsync
-                    var reading = await _device.ExecuteAsync(_command, _args, _context);
+                    var reading = await _device.ExecuteAsync(_command, _args, _context).ConfigureAwait(false);
                     
                     if (reading.Success)
                     {
@@ -100,7 +118,7 @@ namespace ZL.Gear.Sensing.Samplers
 
                 if (_interval > TimeSpan.Zero)
                 {
-                    try { await Task.Delay(_interval, token); } 
+                    try { await Task.Delay(_interval, token).ConfigureAwait(false); }
                     catch (OperationCanceledException)
                     {
                         break;

@@ -12,7 +12,7 @@ namespace ZL.Gear.Engine
     /// <summary>
     /// 管理单次测试会话，支持 WebAPI 异步状态查询。
     /// </summary>
-    public class GearTestSession
+    public class GearTestSession : IDisposable
     {
         public string SessionId { get; } = Guid.NewGuid().ToString("N");
         public string Model { get; }
@@ -24,6 +24,7 @@ namespace ZL.Gear.Engine
 
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private readonly GearRunner _runner;
+        private bool _disposed;
 
         public GearTestSession(GearRunner runner, string model, string barcode)
         {
@@ -54,6 +55,14 @@ namespace ZL.Gear.Engine
         }
 
         public void Cancel() => _cts.Cancel();
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _cts.Cancel();
+            _cts.Dispose();
+        }
     }
 
     public enum TestExecutionStatus

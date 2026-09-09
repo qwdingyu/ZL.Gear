@@ -74,7 +74,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             }
 
             // 执行步骤
-            var result = await next(step, context);
+            var result = await next(step, context).ConfigureAwait(false);
 
             // 如果失败且启用快照，则保存现场
             if (!result.Success && snapshotEnabled)

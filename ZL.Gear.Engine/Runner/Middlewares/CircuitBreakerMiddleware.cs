@@ -89,7 +89,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             }
 
             // 执行步骤
-            var result = await next(step, context);
+            var result = await next(step, context).ConfigureAwait(false);
 
             // 根据结果更新熔断器状态
             if (!result.Success)
