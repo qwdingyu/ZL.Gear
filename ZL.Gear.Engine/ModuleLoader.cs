@@ -7,6 +7,7 @@ using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.BuiltIn;
 using ZL.Gear.Engine.Handlers;
+using ZL.Gear.Engine.Runner;
 using ZL.Gear.Drivers.Plc.Handlers;
 using ZL.Gear.Sensing.LinkageMeasurement;
 
@@ -266,6 +267,12 @@ namespace ZL.Gear.Engine
             if (_registry is IRegisterableStepHandlerLookup registrableLookup)
             {
                 unloadedCount = registrableLookup.RemoveByPrefix(prefixWithDot, out removedHandlers);
+            }
+
+            // 同步清理 StepDispatcher 侧的元数据缓存（attribute/schema），避免热加载后残留旧命令元数据
+            if (_registry is StepDispatcher dispatcher)
+            {
+                dispatcher.RemoveMetadataByPrefix(prefixWithDot);
             }
 
             // 对已移除的 Handler 执行资源释放（优先异步释放）

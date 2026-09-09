@@ -193,14 +193,15 @@ namespace ZL.Gear.Core.Workflow
         }
         /// <summary>
         /// 注册一个清理操作，该操作将在工作流结束时（无论成功或失败）被执行。
-        /// 多个 Finally 块将以注册的相反顺序执行（类似栈的 LIFO）。
+        /// 注意：清理任务的执行顺序不做严格保证（当前实现基于 ConcurrentBag）；若某个清理操作依赖执行顺序，
+        /// 请将其编排到同一清理操作内或使用工作流步骤显式控制。
         /// </summary>
         /// <param name="description">清理操作的描述。</param>
         /// <param name="cleanupAction">要执行的清理操作。</param>
         public MicroWorkflow Finally(string description, ActionDelegate cleanupAction)
         {
-            // 注意：ConcurrentBag 是无序的，如果需要严格的 LIFO 顺序，应使用 ConcurrentStack
-            // 但对于独立的清理任务（如停止不同任务），顺序通常不重要。
+            // 说明：ConcurrentBag 对同一线程的插入与枚举通常近似后进先出，但语言规范不保证严格顺序；
+            // 独立清理任务（如停止不同设备）顺序通常不重要，无需为此引入有序容器。
             _cleanupActions.Add(async (s, c) =>
             {
                 c.Log($"-> 清理: {description}");
@@ -278,13 +279,12 @@ namespace ZL.Gear.Core.Workflow
                     try
                     {
                         // 执行条件检查
-                        isReady = await condition(step, ctx);
+                        isReady = await condition(step, ctx).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        // 轮询中的异常通常意味着设备还没准备好（如串口未连接），建议记录但不中断
-                        // 也可以选择 throw 出来中断，视业务策略而定
-                        // ctx.Log($"[Wait] Check error: {ex.Message}");
+                        // 轮询中的异常通常意味着设备还没准备好（如串口未连接），记录但不中断
+                        ctx.Log($"[WaitUntil] 条件检查异常（继续轮询）: {ex.Message}");
                     }
 
                     if (isReady)
@@ -292,7 +292,7 @@ namespace ZL.Gear.Core.Workflow
                         return ExecutionResult.Succeeded(); // 只有这里返回成功，流程才会继续
                     }
 
-                    await Task.Delay(pollIntervalMs, ctx.CancellationToken);
+                    await Task.Delay(pollIntervalMs, ctx.CancellationToken).ConfigureAwait(false);
                 }
                 return ExecutionResult.Failed($"等待超时 ({timeoutMs}ms): {description}");
             });
@@ -325,7 +325,7 @@ namespace ZL.Gear.Core.Workflow
                     await using (var subFlow = CreateChildWorkflow(step, subContext))
                     {
                         loopBodyBuilder(subFlow); // 用户定义循环体
-                        var result = await subFlow.GetResultAsync();
+                        var result = await subFlow.GetResultAsync().ConfigureAwait(false);
 
                         if (!result.Success) return result; // 如果循环体内部失败，跳出
                     }
@@ -344,7 +344,7 @@ namespace ZL.Gear.Core.Workflow
                 var builder = new SwitchBuilder<T>(value, step, ctx, _workflowTimeoutMs);
                 buildSwitch(builder); // 用户配置 Case
 
-                return await builder.ExecuteSelectedAsync();
+                return await builder.ExecuteSelectedAsync().ConfigureAwait(false);
             });
         }
 
@@ -358,7 +358,7 @@ namespace ZL.Gear.Core.Workflow
                 try
                 {
                     var action = ctx.ActionResolver.ResolveAction(actionName);
-                    var result = await action(step, ctx);
+                    var result = await action(step, ctx).ConfigureAwait(false);
                     if (!result.Success)
                     {
                         ctx.Log($"[警告] 忽略非关键错误: {result.Message}");
@@ -454,7 +454,7 @@ namespace ZL.Gear.Core.Workflow
                     try
                     {
                         ctx.Log($"[并行] 启动: {t.subDesc}");
-                        return await t.action(step, ctx);
+                        return await t.action(step, ctx).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -462,7 +462,7 @@ namespace ZL.Gear.Core.Workflow
                     }
                 }).ToList();
 
-                var results = await Task.WhenAll(runningTasks);
+                var results = await Task.WhenAll(runningTasks).ConfigureAwait(false);
 
                 // 聚合结果
                 var failures = results.Where(r => !r.Success).ToList();
@@ -567,7 +567,7 @@ namespace ZL.Gear.Core.Workflow
                     return ExecutionResult.Failed($"MicroWorkflow 流程级超时 ({_workflowTimeoutMs.Value}ms)。");
                 }
 
-                return await chainTask;
+                return await chainTask.ConfigureAwait(false);
             }
 
             var finalResult = await _executionChain.ConfigureAwait(false);
@@ -776,7 +776,7 @@ namespace ZL.Gear.Core.Workflow
                 var subContext = _ctx.CreateChildContext(_step);
                 await using var subFlow = MicroWorkflow.StartChildWithTimeout(_step, subContext, _parentWorkflowTimeoutMs);
                 branchFlow(subFlow);
-                return await subFlow.GetResultAsync();
+                return await subFlow.GetResultAsync().ConfigureAwait(false);
             };
         }
 
@@ -790,7 +790,7 @@ namespace ZL.Gear.Core.Workflow
                     var subContext = _ctx.CreateChildContext(_step);
                     await using var subFlow = MicroWorkflow.StartChildWithTimeout(_step, subContext, _parentWorkflowTimeoutMs);
                     branchFlow(subFlow);
-                    return await subFlow.GetResultAsync();
+                    return await subFlow.GetResultAsync().ConfigureAwait(false);
                 };
             }
         }

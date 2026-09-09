@@ -238,6 +238,26 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
+        /// 按命令前缀移除 Handler 元数据缓存（插件卸载时由 <see cref="ModuleLoader.UnloadPlugin"/> 调用），
+        /// 避免热加载/卸载后残留已卸载插件的 attribute 与参数 schema 元数据。
+        /// </summary>
+        /// <param name="prefix">命令前缀（含尾随点，如 "MyPlugin."）；不区分大小写。</param>
+        public void RemoveMetadataByPrefix(string prefix)
+        {
+            if (string.IsNullOrWhiteSpace(prefix)) return;
+
+            var keys = _handlerMetadata.Keys
+                .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var key in keys)
+            {
+                _handlerMetadata.TryRemove(key, out _);
+                _parameterSchemas.TryRemove(key, out _);
+            }
+        }
+
+        /// <summary>
         /// 获取指定命令对应的 EvaluateResult 元数据（若 Handler 侧通过 <see cref="StepHandlerCommandAttribute"/> 标注）。
         /// </summary>
         /// <param name="command">命令名称。</param>

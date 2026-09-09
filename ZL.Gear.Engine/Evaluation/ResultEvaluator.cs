@@ -99,6 +99,16 @@ namespace ZL.Gear.Engine.Evaluation
                     continue;
                 }
 
+                // --- 单位一致性校验：规格与实测均显式声明单位且不一致 → 直接 FAIL（防止 mm/inch 等误判）---
+                if (!string.IsNullOrWhiteSpace(spec.Unit)
+                    && !string.IsNullOrWhiteSpace(measurement.Unit)
+                    && !string.Equals(spec.Unit, measurement.Unit, StringComparison.OrdinalIgnoreCase))
+                {
+                    globalPass = false;
+                    messages.Add($"[FAIL] 单位不匹配: 规格单位 '{spec.Unit}' vs 实测单位 '{measurement.Unit}'");
+                    continue;
+                }
+
                 // --- 核心判定 ---
                 var checkResult = CheckSingleSpec(spec, measurement);
 

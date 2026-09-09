@@ -199,7 +199,11 @@ namespace ZL.Gear.Engine.Runner
                 {
                     leaseSuccess = false;
                     runResult.OverallSuccess = false;
-                    runResult.Summary = $"未找到该步骤对应的设备，或设备未启用: {ex.Message}";
+                    // 展开 AggregateException，保留每台设备的失败细节，便于快速定位（单设备故障 vs 整批不可用）
+                    var detail = ex is AggregateException agg
+                        ? string.Join("; ", agg.Flatten().InnerExceptions.Select(e => e.Message))
+                        : ex.Message;
+                    runResult.Summary = $"未找到该步骤对应的设备，或设备未启用: {detail}";
                     _log($"[严重错误] {runResult.Summary}");
                     _eventBus.Publish(new RunStateChangedEvent(RunState.Error, runResult.Summary));
                 }
