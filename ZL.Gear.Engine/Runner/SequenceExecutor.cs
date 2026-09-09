@@ -174,6 +174,7 @@ namespace ZL.Gear.Engine.Runner
             }
 
             var testWasStoppedByFail = false;
+            var runInterrupted = false;
             var sharedData = new ContextVariableStore();
 
             var runResult = new TestRunResult { Model = model, Barcode = barcode, StartTime = DateTime.Now };
@@ -198,7 +199,6 @@ namespace ZL.Gear.Engine.Runner
                 catch (Exception ex)
                 {
                     leaseSuccess = false;
-                    runResult.OverallSuccess = false;
                     // 展开 AggregateException，保留每台设备的失败细节，便于快速定位（单设备故障 vs 整批不可用）
                     var detail = ex is AggregateException agg
                         ? string.Join("; ", agg.Flatten().InnerExceptions.Select(e => e.Message))
@@ -274,18 +274,17 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     runResult.EndTime = DateTime.Now;
-                    // OverallSuccess 权威写入在 try/finally 之后（带 StopByFail/空列表保护），此处不抢先赋值
                 }
             }
             catch (OperationCanceledException)
             {
-                runResult.OverallSuccess = false;
+                runInterrupted = true;
                 runResult.Summary = "测试因超时或用户取消而在准备阶段终止。";
                 _log($"[警告] {runResult.Summary}");
             }
             catch (Exception ex)
             {
-                runResult.OverallSuccess = false;
+                runInterrupted = true;
                 runResult.Summary = $"测试序列因严重错误而中断: {ex.Message}";
                 _log($"[严重错误] {runResult.Summary}");
                 _eventBus.Publish(new RunStateChangedEvent(RunState.Error, runResult.Summary));
@@ -300,20 +299,14 @@ namespace ZL.Gear.Engine.Runner
 
                 try { await timerTask; } catch { /* 忽略取消或超时，确保清理完成 */ }
             }
-            // 5. 结果处理阶段 (在所有执行和清理之后)
-            // ★ 修正点：使用 _totalSw 的时间，并设置 EndTime
+            // 5. 结果处理阶段：OverallSuccess 仅此单点写入（结局模型，非 catch 补丁）
             _totalSw.Stop();
-            // 记录确切的结束时间戳
             runResult.EndTime = DateTime.Now;
-            if (testWasStoppedByFail || !leaseSuccess)
-            {
-                runResult.OverallSuccess = false;
-            }
-            else
-            {
-                // 修复无设备需求报错
-                runResult.OverallSuccess = runResult.StepResults == null || runResult.StepResults.Count == 0 || runResult.StepResults.All(r => r.IsBranchSuccessful);
-            }
+            runResult.OverallSuccess = ComputeOverallSuccess(
+                leaseSuccess,
+                testWasStoppedByFail,
+                runInterrupted,
+                runResult.StepResults);
             runResult.Summary = BuildSummary(runResult);
             HandleFinalResultsAsync(runResult, steps, model, barcode);
             _log("==================================================");
@@ -600,6 +593,28 @@ namespace ZL.Gear.Engine.Runner
                 _eventBus.Publish(new TestRunCompletedEvent(runResult));
                 _eventBus.Publish(new RunStateChangedEvent(runResult.OverallSuccess ? RunState.Stopped : RunState.Error));
             }
+        }
+
+        /// <summary>
+        /// 会话结局单点计算：租赁失败 / StopByFail / 运行中断 / 步骤分支 — 任一否决则整体失败。
+        /// </summary>
+        /// <remarks>
+        /// 禁止在 catch 内抢写 OverallSuccess 再被此处覆盖；中断用 <paramref name="runInterrupted"/> 表达。
+        /// </remarks>
+        private static bool ComputeOverallSuccess(
+            bool leaseSuccess,
+            bool stoppedByFail,
+            bool runInterrupted,
+            IReadOnlyList<StepRunResult> stepResults)
+        {
+            if (!leaseSuccess || stoppedByFail || runInterrupted)
+            {
+                return false;
+            }
+
+            return stepResults == null
+                || stepResults.Count == 0
+                || stepResults.All(r => r.IsBranchSuccessful);
         }
 
         /// <summary>

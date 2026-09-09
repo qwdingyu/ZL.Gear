@@ -9,16 +9,13 @@ using ZL.Gear.Core.Models;
 namespace ZL.Gear.Engine.Runner.Middlewares
 {
     /// <summary>
-    /// 超时控制中间件（可选显式挂载）。
+    /// 遗留：超时控制中间件。步骤超时权威在 <c>StepDispatcher.DispatchCoreAsync</c>。
     /// <para>
-    /// 预设管道（Default/Simulation/Lab）已改为由 <c>StepDispatcher.DispatchCoreAsync</c> 统一施加步骤超时，
-    /// <b>请勿</b>再与 DispatchCore 叠加使用本中间件，否则会出现双 CTS 竞速。
-    /// 仅在自定义管道且未走 DispatchCore 超时逻辑时，才应 <c>Use(new TimeoutMiddleware(...))</c>。
+    /// 预设管道不得挂载本中间件（双 CTS）。勿「抽公共再回流双路径」。
+    /// 仅当自定义管道且完全不走 DispatchCore 超时时，才可显式使用（不推荐）。
     /// </para>
-    /// 参数：
-    /// - TimeoutMs: 超时毫秒，默认 step.TimeoutMs 或 30000
-    /// - TimeoutAction: Fail（默认）/ Continue
     /// </summary>
+    [Obsolete("步骤超时权威在 StepDispatcher.DispatchCoreAsync；预设管道勿挂载，避免双 CTS。参见 docs/128。")]
     public class TimeoutMiddleware : IStepMiddleware
     {
         private readonly Action<string> _log;
