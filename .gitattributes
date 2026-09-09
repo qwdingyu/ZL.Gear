@@ -1,0 +1,49 @@
+# 行尾与文本归一化：仓库内统一存储 LF；检出时由 Git 按平台 autocrlf 处理
+* text=auto
+
+# 源代码/文本显式按文本处理（归一为 LF 入库）
+*.cs text
+*.csproj text
+*.sln text
+*.props text
+*.targets text
+*.json text
+*.md text
+*.xml text
+*.yml text
+*.yaml text
+*.txt text
+*.config text
+*.manifest text
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制文件保护（不进行行尾/文本转换）
+*.dll binary
+*.exe binary
+*.pdb binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.gz binary
+*.tar binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+*.db binary
+*.sqlite binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.dat binary
+*.bin binary
