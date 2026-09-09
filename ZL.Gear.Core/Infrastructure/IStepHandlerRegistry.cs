@@ -12,7 +12,7 @@ namespace ZL.Gear.Core.Infrastructure
     public interface IStepHandlerRegistry
     {
         /// <summary>
-        /// 注册步骤处理器。
+        /// 注册步骤处理器（仅用于内部实现，公共 API 请使用 <see cref="RegisterHandlerWithAction"/>）。
         /// </summary>
         /// <param name="command">命令名称，用于步骤配置中的 Command 字段匹配。</param>
         /// <param name="handler">处理器实例。</param>

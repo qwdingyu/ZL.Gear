@@ -502,8 +502,7 @@ namespace ZL.Gear.Engine
                 try
                 {
                     var instance = _handlerFactory.CreateHandler(type);
-                    _registry.RegisterHandler(cmdName, instance);
-                    _actionRegistry.RegisterAction(cmdName, instance.ExecuteAsync, RegistrationPolicy.ThrowIfExists);
+                    _registry.RegisterHandlerWithAction(cmdName, instance);
                 }
                 catch (Exception ex)
                 {

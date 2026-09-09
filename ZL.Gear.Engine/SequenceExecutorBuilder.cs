@@ -245,7 +245,7 @@ namespace ZL.Gear.Engine
                 {
                     foreach (var (command, handler) in _handlerRegistrations)
                     {
-                        dispatcher.RegisterHandler(command, handler);
+                        dispatcher.RegisterHandlerWithAction(command, handler);
                         _logger?.Invoke($"[SequenceExecutorBuilder] 已注册自定义 Handler: {command}");
                     }
                 }

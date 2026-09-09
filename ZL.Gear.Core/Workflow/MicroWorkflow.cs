@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Models;
@@ -15,7 +16,7 @@ namespace ZL.Gear.Core.Workflow
     public sealed class MicroWorkflow : IAsyncDisposable
     {
         private readonly StepConfig _step;
-        private readonly StepContext _context;
+        private StepContext _context;
         private readonly ConcurrentBag<Measurement> _measurements = new ConcurrentBag<Measurement>();
         private Task<ExecutionResultBase> _executionChain;
         private readonly ConcurrentBag<ActionDelegate> _cleanupActions = new ConcurrentBag<ActionDelegate>();
@@ -24,6 +25,10 @@ namespace ZL.Gear.Core.Workflow
         /// 标记是否开启严格检查（必须有测量数据）
         /// </summary>
         private bool _requireMeasurements = false;
+        /// <summary>
+        /// 流程级超时（毫秒），为空表示不启用流程级超时。
+        /// </summary>
+        private int? _workflowTimeoutMs;
 
         private MicroWorkflow(StepConfig step, StepContext context)
         {
@@ -39,6 +44,66 @@ namespace ZL.Gear.Core.Workflow
         public static MicroWorkflow Start(StepConfig step, StepContext context)
         {
             return new MicroWorkflow(step, context);
+        }
+
+        /// <summary>
+        /// 启动一个新的微工作流实例，并显式指定流程级超时时间（毫秒）。
+        /// </summary>
+        /// <param name="step">步骤配置。</param>
+        /// <param name="context">执行上下文。</param>
+        /// <param name="workflowTimeoutMs">流程级超时毫秒数，小于等于 0 表示不启用流程级超时。</param>
+        /// <returns>微工作流实例。</returns>
+        public static MicroWorkflow Start(StepConfig step, StepContext context, int workflowTimeoutMs)
+        {
+            if (step == null) throw new ArgumentNullException(nameof(step));
+            if (context == null) throw new ArgumentNullException(nameof(context));
+
+            var workflow = new MicroWorkflow(step, context);
+            if (workflowTimeoutMs > 0)
+            {
+                workflow._workflowTimeoutMs = workflowTimeoutMs;
+                workflow._context = workflow._context.WithToken(CreateWorkflowTimeoutToken(context, workflowTimeoutMs));
+            }
+
+            return workflow;
+        }
+
+        /// <summary>
+        /// 为流程级超时创建链接令牌，不覆盖原始上下文令牌。
+        /// </summary>
+        private static CancellationToken CreateWorkflowTimeoutToken(StepContext context, int workflowTimeoutMs)
+        {
+            var workflowTimeoutCts = new CancellationTokenSource(workflowTimeoutMs);
+            return CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, workflowTimeoutCts.Token).Token;
+        }
+
+        /// <summary>
+        /// 创建子流程，继承当前工作流的流程级超时设置（若有）。
+        /// </summary>
+        private MicroWorkflow CreateChildWorkflow(StepConfig step, StepContext context)
+        {
+            if (_workflowTimeoutMs.HasValue)
+            {
+                return Start(step, context, _workflowTimeoutMs.Value);
+            }
+
+            return Start(step, context);
+        }
+
+        /// <summary>
+        /// 创建子流程并显式携带父级超时（供外部辅助类复用，避免重复逻辑）。
+        /// </summary>
+        /// <param name="step">步骤配置。</param>
+        /// <param name="context">执行上下文。</param>
+        /// <param name="parentWorkflowTimeoutMs">父级流程级超时，为空则沿用上下文。</param>
+        public static MicroWorkflow StartChildWithTimeout(StepConfig step, StepContext context, int? parentWorkflowTimeoutMs)
+        {
+            if (parentWorkflowTimeoutMs.HasValue && parentWorkflowTimeoutMs.Value > 0)
+            {
+                return Start(step, context, parentWorkflowTimeoutMs.Value);
+            }
+
+            return Start(step, context);
         }
         /// <summary>
         /// 向工作流链中添加一个通用的执行步骤。
@@ -108,6 +173,17 @@ namespace ZL.Gear.Core.Workflow
         public MicroWorkflow If(bool condition, Func<MicroWorkflow, MicroWorkflow> conditionalWorkflow)
         {
             if (condition) return conditionalWorkflow(this);
+            return this;
+        }
+
+        /// <summary>
+        /// 根据条件决定是否执行一段工作流分支（布尔表达式重载）。
+        /// </summary>
+        /// <param name="condition">如果为 true，则执行分支。</param>
+        /// <param name="conditionalWorkflow">定义了条件分支的工作流配置函数。</param>
+        public MicroWorkflow If(Func<StepContext, bool> condition, Func<MicroWorkflow, MicroWorkflow> conditionalWorkflow)
+        {
+            if (condition(_context)) return conditionalWorkflow(this);
             return this;
         }
         /// <summary>
@@ -241,7 +317,7 @@ namespace ZL.Gear.Core.Workflow
 
                     // 使用子上下文隔离环境
                     var subContext = ctx.CreateChildContext(step);
-                    await using (var subFlow = Start(step, subContext))
+                    await using (var subFlow = CreateChildWorkflow(step, subContext))
                     {
                         loopBodyBuilder(subFlow); // 用户定义循环体
                         var result = await subFlow.GetResultAsync();
@@ -260,7 +336,7 @@ namespace ZL.Gear.Core.Workflow
             return Then("分支判断", async (step, ctx) =>
             {
                 var value = selector(ctx);
-                var builder = new SwitchBuilder<T>(value, step, ctx);
+                var builder = new SwitchBuilder<T>(value, step, ctx, _workflowTimeoutMs);
                 buildSwitch(builder); // 用户配置 Case
 
                 return await builder.ExecuteSelectedAsync();
@@ -299,6 +375,25 @@ namespace ZL.Gear.Core.Workflow
         public MicroWorkflow ExpectMeasurements()
         {
             _requireMeasurements = true;
+            return this;
+        }
+
+        /// <summary>
+        /// 为当前工作流设置流程级超时（毫秒）。
+        /// 设置后，<see cref="GetResultAsync"/> 会在整体超时时返回失败结果，
+        /// 同时子流程也会继承该超时设置。
+        /// </summary>
+        /// <param name="timeoutMs">超时毫秒数，小于等于 0 表示不启用流程级超时。</param>
+        public MicroWorkflow WorkflowTimeout(int timeoutMs)
+        {
+            if (timeoutMs <= 0)
+            {
+                return this;
+            }
+
+            _workflowTimeoutMs = timeoutMs;
+            // 替换当前上下文令牌，链接原令牌与流程级超时令牌
+            _context = _context.WithToken(CreateWorkflowTimeoutToken(_context, timeoutMs));
             return this;
         }
 
@@ -439,9 +534,30 @@ namespace ZL.Gear.Core.Workflow
         /// <summary>
         /// 异步执行整个工作流链，并返回最终结果。
         /// 如果流程成功，将使用收集到的测量数据进行最终的聚合裁决。
-        /// checkVal 是否做结果判断 
+        /// checkVal 是否做结果判断
         /// </summary>
         public async Task<ExecutionResultBase> GetResultAsync()
+        {
+            // 如果设置了流程级超时，则等待执行链时增加整体超时保护
+            if (_workflowTimeoutMs.HasValue)
+            {
+                using var workflowTimeoutCts = new CancellationTokenSource(_workflowTimeoutMs.Value);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_context.CancellationToken, workflowTimeoutCts.Token);
+
+                try
+                {
+                    return await GetResultAsyncInternal(linkedCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return ExecutionResult.Failed($"MicroWorkflow 流程级超时 ({_workflowTimeoutMs.Value}ms)。");
+                }
+            }
+
+            return await GetResultAsyncInternal(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private async Task<ExecutionResultBase> GetResultAsyncInternal(CancellationToken cancellationToken)
         {
             var finalResult = await _executionChain.ConfigureAwait(false);
             if (!finalResult.Success)
@@ -617,13 +733,15 @@ namespace ZL.Gear.Core.Workflow
         private readonly T _value;
         private readonly StepConfig _step;
         private readonly StepContext _ctx;
+        private readonly int? _parentWorkflowTimeoutMs;
         private Func<Task<ExecutionResultBase>> _matchedAction = null;
 
-        public SwitchBuilder(T value, StepConfig step, StepContext ctx)
+        public SwitchBuilder(T value, StepConfig step, StepContext ctx, int? parentWorkflowTimeoutMs)
         {
             _value = value;
             _step = step;
             _ctx = ctx;
+            _parentWorkflowTimeoutMs = parentWorkflowTimeoutMs;
         }
 
         public void Case(T compareValue, Func<MicroWorkflow, MicroWorkflow> branchFlow)
@@ -636,7 +754,7 @@ namespace ZL.Gear.Core.Workflow
                 _ctx.Log($"[Switch] 命中分支: {compareValue}");
                 // 执行子流程
                 var subContext = _ctx.CreateChildContext(_step);
-                await using var subFlow = MicroWorkflow.Start(_step, subContext);
+                await using var subFlow = MicroWorkflow.StartChildWithTimeout(_step, subContext, _parentWorkflowTimeoutMs);
                 branchFlow(subFlow);
                 return await subFlow.GetResultAsync();
             };
@@ -650,7 +768,7 @@ namespace ZL.Gear.Core.Workflow
                 {
                     _ctx.Log($"[Switch] 进入默认分支");
                     var subContext = _ctx.CreateChildContext(_step);
-                    await using var subFlow = MicroWorkflow.Start(_step, subContext);
+                    await using var subFlow = MicroWorkflow.StartChildWithTimeout(_step, subContext, _parentWorkflowTimeoutMs);
                     branchFlow(subFlow);
                     return await subFlow.GetResultAsync();
                 };
