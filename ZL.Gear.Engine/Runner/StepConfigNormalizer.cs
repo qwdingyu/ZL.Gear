@@ -38,7 +38,30 @@ namespace ZL.Gear.Engine.Runner
                         TargetDict.Add(key, val);
                 }
             }
-            step.TargetDict = TargetDict;
+            if (step.TargetDict == null)
+            {
+                step.TargetDict = TargetDict;
+            }
+            else
+            {
+                foreach (var kv in TargetDict)
+                {
+                    if (!step.TargetDict.ContainsKey(kv.Key))
+                    {
+                        step.TargetDict.Add(kv.Key, kv.Value);
+                    }
+                }
+            }
+
+            // 确保主 Target 也在 TargetDict 中（若 BindProfile 未提前处理，则在此补全）
+            if (!string.IsNullOrEmpty(step.Target) && !step.TargetDict.ContainsKey("Main"))
+            {
+                step.TargetDict["Main"] = step.Target;
+                if (!step.TargetDict.ContainsKey(step.Target))
+                {
+                    step.TargetDict[step.Target] = step.Target;
+                }
+            }
             var parameters = step.Parameters ?? new Dictionary<string, object>();
             int timeoutMs = step.TimeoutMs;
             // 确保时长不超过总超时

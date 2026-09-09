@@ -39,9 +39,27 @@ namespace ZL.Gear.Core.Infrastructure
         /// <returns>执行结果。</returns>
         public async Task<ExecutionResultBase> ExecuteAsync(StepConfig step, StepContext context)
         {
-            await OnBeforeExecuteAsync(step, context);
+            try
+            {
+                await OnBeforeExecuteAsync(step, context);
+            }
+            catch (Exception ex)
+            {
+                return ExecutionResult.Failed($"装饰器前置逻辑执行异常: {ex.Message}");
+            }
+
             var result = await InnerHandler.ExecuteAsync(step, context);
-            await OnAfterExecuteAsync(step, context, result);
+
+            try
+            {
+                await OnAfterExecuteAsync(step, context, result);
+            }
+            catch (Exception ex)
+            {
+                // 后置逻辑异常不应覆盖原始执行结果，仅记录
+                context.Log?.Invoke($"[DecoratorStepHandler] 后置逻辑执行异常: {ex.Message}");
+            }
+
             return result;
         }
 

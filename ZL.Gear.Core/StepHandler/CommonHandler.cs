@@ -20,7 +20,11 @@ namespace ZL.Gear.Core.StepHandler
             if (string.IsNullOrEmpty(step.Command))
                 return ExecutionResult.Failed("步骤配置中未指定 'Command'。");
 
-            var device = context.GetDevice<IDevice>(step.Target);
+            if (!context.ActiveDevices.TryGetValue(step.Target, out var device))
+            {
+                return ExecutionResult.Failed($"设备 '{step.Target}' 未在测试开始时被租用，无法在步骤中使用。");
+            }
+
             var reading = await device.ExecuteAsync(step.Command, step.Parameters, context);
             var key = step.MeasurementKey;
 

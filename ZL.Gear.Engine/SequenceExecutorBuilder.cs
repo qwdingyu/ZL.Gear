@@ -519,6 +519,23 @@ namespace ZL.Gear.Engine
     {
         public bool EvaluateCondition(string expression, IDictionary<string, object> variables)
         {
+            if (string.IsNullOrWhiteSpace(expression)) return true;
+
+            // 支持简单的布尔变量名直接匹配（不区分大小写）
+            if (variables != null && variables.TryGetValue(expression, out var value))
+            {
+                if (value is bool boolValue) return boolValue;
+                if (value != null) return Convert.ToBoolean(value);
+            }
+
+            // 支持 "key == value" / "key != value" 简单比较
+            var trimmed = expression.Trim();
+            if (trimmed.StartsWith("!") && variables != null && variables.TryGetValue(trimmed.Substring(1), out var negValue))
+            {
+                if (negValue is bool negBool) return !negBool;
+                if (negValue != null) return !Convert.ToBoolean(negValue);
+            }
+
             return true;
         }
 
@@ -550,6 +567,31 @@ namespace ZL.Gear.Engine
 
         public void RegisterAction(string name, Func<StepConfig, StepContext, Task<(bool Success, string Message)>> setupFunc, RegistrationPolicy policy = RegistrationPolicy.ThrowIfExists)
         {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            if (setupFunc == null) return;
+
+            if (policy == RegistrationPolicy.Ignore && _actions.ContainsKey(name))
+            {
+                return;
+            }
+
+            if (policy == RegistrationPolicy.ThrowIfExists && _actions.ContainsKey(name))
+            {
+                throw new InvalidOperationException($"动作 '{name}' 已注册。");
+            }
+
+            _actions[name] = async (step, ctx) =>
+            {
+                try
+                {
+                    var result = await setupFunc(step, ctx);
+                    return result.Success ? ExecutionResult.Succeeded(result.Message) : ExecutionResult.Failed(result.Message);
+                }
+                catch (Exception ex)
+                {
+                    return ExecutionResult.Failed($"动作 '{name}' 执行异常: {ex.Message}");
+                }
+            };
         }
 
         public void RegisterAction(string name, ActionDelegate action, RegistrationPolicy policy = RegistrationPolicy.ThrowIfExists)
