@@ -162,7 +162,8 @@ namespace ZL.Gear.Engine
         private void BuildNode(MicroWorkflow flow, WorkflowNode node, StepContext ctx)
         {
             // --- [逻辑大脑：分支检查] ---
-            // 注意：WaitUntil 节点的 Condition 是用来轮询的，不作为前置跳过条件
+            // 非 WaitUntil：节点 Condition 为构建期守卫（仅初始 Variables），不在执行期重评。
+            // 依赖前序 OutputKey 的运行时条件 → 使用 Assert Args.Condition；轮询到位 → WaitUntil。
             if (!string.IsNullOrEmpty(node.Condition) && node.Type != WorkflowNodeType.WaitUntil)
             {
                 if (!ctx.Evaluate(node.Condition))

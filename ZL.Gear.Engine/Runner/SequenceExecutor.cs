@@ -499,15 +499,17 @@ namespace ZL.Gear.Engine.Runner
 
                         if (stepMapping.TryGetValue(subResult.StepKey, out var subConfig))
                         {
-                            var subContext = parentContext.CreateChildContext((StepConfig)subConfig.Clone());
+                            // 并行路径必须使用独立 clone：Normalize 会就地改写 TargetDict/Parameters，不能共享原配置
+                            var clonedConfig = (StepConfig)subConfig.Clone();
+                            var subContext = parentContext.CreateChildContext(clonedConfig);
                             // 在并行模式下，如果依赖性为空，且有延迟时间定义才进行延迟；否则，交由 DependsOn对应的主步骤进行 事件通知
-                            if (string.IsNullOrEmpty(subConfig.DependsOn) && subConfig.StartDelayMs > 0)
+                            if (string.IsNullOrEmpty(clonedConfig.DependsOn) && clonedConfig.StartDelayMs > 0)
                             {
-                                _log($"[延迟] 子步骤 {subConfig.StepName} 延迟 {subConfig.StartDelayMs}ms 执行");
-                                await Task.Delay(subConfig.StartDelayMs, subContext.CancellationToken);
+                                _log($"[延迟] 子步骤 {clonedConfig.StepName} 延迟 {clonedConfig.StartDelayMs}ms 执行");
+                                await Task.Delay(clonedConfig.StartDelayMs, subContext.CancellationToken);
                             }
 
-                            await ExecuteStepRecursiveAsync(subConfig, subResult, subContext);
+                            await ExecuteStepRecursiveAsync(clonedConfig, subResult, subContext);
                         }
                         else
                         {

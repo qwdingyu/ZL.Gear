@@ -193,14 +193,13 @@ namespace ZL.Gear.Core.Workflow
         }
         /// <summary>
         /// 注册一个清理操作，该操作将在工作流结束时（无论成功或失败）被执行。
-        /// 注意：清理任务的执行顺序不做严格保证（当前实现基于 ConcurrentBag）；若某个清理操作依赖执行顺序，
-        /// 请将其编排到同一清理操作内或使用工作流步骤显式控制。
+        /// 清理按注册的相反顺序执行（LIFO，基于 <see cref="System.Collections.Concurrent.ConcurrentStack{T}"/>）。
         /// </summary>
         /// <param name="description">清理操作的描述。</param>
         /// <param name="cleanupAction">要执行的清理操作。</param>
         public MicroWorkflow Finally(string description, ActionDelegate cleanupAction)
         {
-            // 使用 ConcurrentStack 保证清理操作按注册的相反顺序执行（LIFO），确保资源释放顺序正确。
+            // ConcurrentStack：后注册的清理动作先执行，便于「后获取的资源先释放」。
             _cleanupActions.Push(async (s, c) =>
             {
                 c.Log($"-> 清理: {description}");
@@ -550,6 +549,8 @@ namespace ZL.Gear.Core.Workflow
 
         private async Task<ExecutionResultBase> GetResultAsyncInternal()
         {
+            ExecutionResultBase finalResult;
+
             // 流程级超时保护：使用 Task.WhenAny 确保即使执行链内部未观察令牌也能被整体超时兜底
             if (_workflowTimeoutMs.HasValue)
             {
@@ -569,29 +570,37 @@ namespace ZL.Gear.Core.Workflow
                     return ExecutionResult.Failed($"MicroWorkflow 流程级超时 ({_workflowTimeoutMs.Value}ms)。");
                 }
 
-                return await chainTask.ConfigureAwait(false);
+                finalResult = await chainTask.ConfigureAwait(false);
+            }
+            else
+            {
+                finalResult = await _executionChain.ConfigureAwait(false);
             }
 
-            var finalResult = await _executionChain.ConfigureAwait(false);
+            // 超时与非超时成功路径必须共用收尾，否则测量列表无法回传给 Dispatcher
+            return FinalizeWorkflowResult(finalResult);
+        }
+
+        /// <summary>
+        /// 流程链结束后的统一收尾：失败短路、严格模式校验、测量聚合裁决。
+        /// </summary>
+        private ExecutionResultBase FinalizeWorkflowResult(ExecutionResultBase finalResult)
+        {
             if (!finalResult.Success)
             {
                 Log?.Invoke($"步骤【{_step.StepName}】在MicroWorkflow中执行失败 ，{finalResult.Message}");
-                return finalResult; // 如果中途失败，直接返回失败结果
+                return finalResult;
             }
-            // 流程成功，使用聚合逻辑对收集到的测量结果做最终判断
+
             // 按时间戳排序，消除 ConcurrentBag 无序枚举导致的结果顺序不确定性（报告/下游一致性）
             var ms = _measurements.OrderBy(m => m.Timestamp).ToList();
 
-            // 2. 智能校验
-            // 只有当 (自动开启了严格模式 AND 结果为空) 时，才报错
+            // 只有当开启了严格模式且结果为空时，才报错（防止 ThenMeasure 被跳过却误报成功）
             if (_requireMeasurements && ms.Count == 0)
             {
-                // 场景：代码里写了 ThenMeasure，但是因为逻辑错误（如 If 跳过）导致根本没执行，
-                // 这里会拦截住，防止误报成功。
                 return ExecutionResult.Failed("流程异常：预期的测量步骤未产生任何数据。");
             }
 
-            // 3. 结果裁决
             return Judge(ms);
         }
 
