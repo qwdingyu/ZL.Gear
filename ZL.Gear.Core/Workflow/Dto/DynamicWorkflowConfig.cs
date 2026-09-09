@@ -8,6 +8,12 @@ namespace ZL.Gear.Core.Workflow
     public class DynamicWorkflowConfig
     {
         public string Version { get; set; } = "1.0";
+
+        /// <summary>
+        /// 可选：流程级超时（毫秒）。缺省、null、≤0 或不合法时不启用流程级超时（不报错）。
+        /// </summary>
+        public int? WorkflowTimeoutMs { get; set; }
+
         /// <summary>
         /// 清理动作列表 (对应 .Finally)
         /// </summary>
@@ -23,5 +29,4 @@ namespace ZL.Gear.Core.Workflow
         /// </summary>
         public List<WorkflowNode> Sequence { get; set; } = new();
     }
-
 }

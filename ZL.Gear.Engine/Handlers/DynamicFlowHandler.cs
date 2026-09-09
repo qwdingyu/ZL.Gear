@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -80,31 +81,20 @@ namespace ZL.Gear.Engine
     {
         public async Task<ExecutionResultBase> ExecuteAsync(StepConfig step, StepContext context)
         {
-            // 1. 解析 JSON 定义
+            // 1. 解析 JSON 定义（WorkflowTimeoutMs 非法时清洗为缺省，不因脏超时字段整单失败）
             DynamicWorkflowConfig flowConfig = null;
             if (step.Parameters != null && step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
             {
-                try
+                if (!TryParseFlowConfig(defObj, out flowConfig, out var parseError))
                 {
-                    // 兼容 string、JObject 或 Dictionary/object
-                    string json = defObj is string s ? s : JsonConvert.SerializeObject(defObj);
-                    flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
-                }
-                catch (Exception ex)
-                {
-                    return ExecutionResult.Failed($"工作流定义解析失败: {ex.Message}");
+                    return ExecutionResult.Failed($"工作流定义解析失败: {parseError}");
                 }
             }
             else if (step.Parameters != null && (step.Parameters.ContainsKey("Sequence") || step.Parameters.ContainsKey("sequence")))
             {
-                try
+                if (!TryParseFlowConfig(step.Parameters, out flowConfig, out var parseError))
                 {
-                    string json = JsonConvert.SerializeObject(step.Parameters);
-                    flowConfig = JsonConvert.DeserializeObject<DynamicWorkflowConfig>(json);
-                }
-                catch (Exception ex)
-                {
-                    return ExecutionResult.Failed($"工作流配置反序列化失败: {ex.Message}");
+                    return ExecutionResult.Failed($"工作流配置反序列化失败: {parseError}");
                 }
             }
             else
@@ -130,9 +120,13 @@ namespace ZL.Gear.Engine
                 }
             }
 
-            // 2. 启动 MicroWorkflow (传入隔离的作用域)
+            // 2. 启动 MicroWorkflow（可选流程级超时：缺省/非法 → 0 → 不启用，不报错）
             var flowContext = context.CreateChildContext(step, flowVariables);
-            await using (var workflow = MicroWorkflow.Start(step, flowContext).AsMaster())
+            var workflowTimeoutMs = ResolveWorkflowTimeoutMs(flowConfig, step, msg =>
+            {
+                try { context.Log(msg); } catch { /* 日志失败不影响执行 */ }
+            });
+            await using (var workflow = MicroWorkflow.Start(step, flowContext, workflowTimeoutMs).AsMaster())
             {
                 // 3. 注册清理动作 (Finalizers)
                 if (flowConfig.Finalizers != null)
@@ -547,6 +541,141 @@ namespace ZL.Gear.Engine
 
                 return result;
             };
+        }
+
+        /// <summary>
+        /// 解析流程配置：先清洗非法 WorkflowTimeoutMs，再反序列化。其它字段仍按原规则失败。
+        /// </summary>
+        private static bool TryParseFlowConfig(object raw, out DynamicWorkflowConfig config, out string error)
+        {
+            config = null;
+            error = null;
+            try
+            {
+                JObject jobj;
+                if (raw is string s)
+                {
+                    jobj = JObject.Parse(s);
+                }
+                else if (raw is JObject jo)
+                {
+                    jobj = (JObject)jo.DeepClone();
+                }
+                else
+                {
+                    jobj = JObject.FromObject(raw);
+                }
+
+                SanitizeWorkflowTimeoutMsToken(jobj);
+                config = jobj.ToObject<DynamicWorkflowConfig>() ?? new DynamicWorkflowConfig();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 非法/非正 WorkflowTimeoutMs 从 JSON 移除，避免 int? 反序列化抛错；合法正整数保留或规范化。
+        /// </summary>
+        private static void SanitizeWorkflowTimeoutMsToken(JObject jobj)
+        {
+            if (jobj == null)
+            {
+                return;
+            }
+
+            JToken token = jobj["WorkflowTimeoutMs"] ?? jobj["workflowTimeoutMs"];
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return;
+            }
+
+            if (TryCoercePositiveMs(token.Type == JTokenType.String ? (object)token.Value<string>() : token.ToObject<object>(), out var ms))
+            {
+                jobj["WorkflowTimeoutMs"] = ms;
+                jobj.Remove("workflowTimeoutMs");
+                return;
+            }
+
+            jobj.Remove("WorkflowTimeoutMs");
+            jobj.Remove("workflowTimeoutMs");
+        }
+
+        /// <summary>
+        /// 解析流程级超时：缺省 / null / ≤0 / 无法解析 → 返回 0（不启用，不抛错）。
+        /// 优先级：WorkflowDefinition.WorkflowTimeoutMs → Parameters.WorkflowTimeoutMs。
+        /// </summary>
+        private static int ResolveWorkflowTimeoutMs(
+            DynamicWorkflowConfig flowConfig,
+            StepConfig step,
+            Action<string> log)
+        {
+            if (TryCoercePositiveMs(flowConfig?.WorkflowTimeoutMs, out var fromCfg))
+            {
+                return fromCfg;
+            }
+
+            if (step?.Parameters == null)
+            {
+                return 0;
+            }
+
+            object raw = null;
+            if (!step.Parameters.TryGetValue("WorkflowTimeoutMs", out raw)
+                && !step.Parameters.TryGetValue("workflowTimeoutMs", out raw))
+            {
+                return 0;
+            }
+
+            if (TryCoercePositiveMs(raw, out var fromParam))
+            {
+                return fromParam;
+            }
+
+            // 键存在但值非法：忽略，保持无超时（鲁棒，不因配置脏数据失败）
+            log?.Invoke("[DynamicFlow] WorkflowTimeoutMs 无效或非正，已忽略（不启用流程级超时）。");
+            return 0;
+        }
+
+        /// <summary>
+        /// 将任意对象尝试转为正整数毫秒；失败返回 false。
+        /// </summary>
+        private static bool TryCoercePositiveMs(object value, out int ms)
+        {
+            ms = 0;
+            if (value == null)
+            {
+                return false;
+            }
+
+            if (value is int i)
+            {
+                if (i > 0) { ms = i; return true; }
+                return false;
+            }
+
+            if (value is long l)
+            {
+                if (l > 0 && l <= int.MaxValue) { ms = (int)l; return true; }
+                return false;
+            }
+
+            if (value is double d)
+            {
+                if (d > 0 && d <= int.MaxValue) { ms = (int)d; return true; }
+                return false;
+            }
+
+            if (int.TryParse(Convert.ToString(value), out var parsed) && parsed > 0)
+            {
+                ms = parsed;
+                return true;
+            }
+
+            return false;
         }
     }
 }
