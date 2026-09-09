@@ -52,7 +52,8 @@ namespace ZL.Gear.Engine.Runner
 
         /// <summary>
         /// 使用产线生产场景的默认全功能管道。
-        /// 包含：日志、审计、熔断、条件、安全、延迟、超时、资源锁、重试、快照、诊断、变量追踪。
+        /// 包含：日志、审计、熔断、条件、安全、延迟、资源锁、重试、快照、诊断、变量追踪。
+        /// 注意：步骤超时由 <see cref="StepDispatcher"/> 的 DispatchCore 统一施加，不再叠加 TimeoutMiddleware，避免双 CTS。
         /// </summary>
         /// <returns>构建器实例，支持链式调用。</returns>
         public StepPipelineBuilder UseDefaultPipeline()
@@ -63,7 +64,7 @@ namespace ZL.Gear.Engine.Runner
             Use(new ConditionMiddleware());
             Use(new SafetyCheckMiddleware(_log));
             Use(new StepDelayMiddleware(_log));
-            Use(new TimeoutMiddleware(_log));
+            // 超时权威在 StepDispatcher.DispatchCoreAsync（支持 TimeoutMs / TimeoutAction）
             Use(new ResourceLockMiddleware());
             Use(new RetryMiddleware());
             Use(new SnapshotMiddleware(_log));
@@ -75,7 +76,7 @@ namespace ZL.Gear.Engine.Runner
         /// <summary>
         /// 使用仿真场景的轻量管道。
         /// 跳过：熔断、审计、快照、诊断、安全、变量追踪。
-        /// 保留：日志、条件、延迟、超时、资源锁。
+        /// 保留：日志、条件、延迟、资源锁。超时由 DispatchCore 统一处理。
         /// </summary>
         /// <returns>构建器实例，支持链式调用。</returns>
         public StepPipelineBuilder UseSimulationPipeline()
@@ -83,7 +84,6 @@ namespace ZL.Gear.Engine.Runner
             Use(new LoggingMiddleware(_log));
             Use(new ConditionMiddleware());
             Use(new StepDelayMiddleware(_log));
-            Use(new TimeoutMiddleware(_log));
             Use(new ResourceLockMiddleware());
             return this;
         }
@@ -91,7 +91,7 @@ namespace ZL.Gear.Engine.Runner
         /// <summary>
         /// 使用实验室场景的管道。
         /// 跳过：熔断、重试、快照。
-        /// 保留：日志、审计、条件、安全、延迟、超时、资源锁、诊断、变量追踪。
+        /// 保留：日志、审计、条件、安全、延迟、资源锁、诊断、变量追踪。超时由 DispatchCore 统一处理。
         /// </summary>
         /// <returns>构建器实例，支持链式调用。</returns>
         public StepPipelineBuilder UseLabPipeline()
@@ -101,7 +101,6 @@ namespace ZL.Gear.Engine.Runner
             Use(new ConditionMiddleware());
             Use(new SafetyCheckMiddleware(_log));
             Use(new StepDelayMiddleware(_log));
-            Use(new TimeoutMiddleware(_log));
             Use(new ResourceLockMiddleware());
             Use(new DiagnosticsMiddleware(_log));
             Use(new VariableTraceMiddleware());

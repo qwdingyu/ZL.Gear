@@ -20,7 +20,7 @@ namespace ZL.Gear.Core.Models
         /// </summary>
         public double? UCL { get; set; }
         /// <summary>
-        /// 偏移量
+        /// 偏移量（补偿）。仅参与数值判定（range/equals 等），不改写入库的原始 Measurement.Value。
         /// </summary>
         public double? Offset { get; set; }
 

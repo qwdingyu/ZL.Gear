@@ -9,17 +9,24 @@ using ZL.Gear.Core.Models;
 namespace ZL.Gear.Engine.Runner.Middlewares
 {
     /// <summary>
-    /// 超时控制中间件。
-    /// 为每个步骤提供独立的超时控制，防止单步骤卡死导致整线停产。
-    /// 
-    /// 使用方式：在步骤的 Parameters 中配置
-    /// - TimeoutMs: 超时时间（毫秒），默认使用 step.TimeoutMs
-    /// - TimeoutAction: 超时后的动作（Fail/Continue），默认 Fail
+    /// 超时控制中间件（可选显式挂载）。
+    /// <para>
+    /// 预设管道（Default/Simulation/Lab）已改为由 <c>StepDispatcher.DispatchCoreAsync</c> 统一施加步骤超时，
+    /// <b>请勿</b>再与 DispatchCore 叠加使用本中间件，否则会出现双 CTS 竞速。
+    /// 仅在自定义管道且未走 DispatchCore 超时逻辑时，才应 <c>Use(new TimeoutMiddleware(...))</c>。
+    /// </para>
+    /// 参数：
+    /// - TimeoutMs: 超时毫秒，默认 step.TimeoutMs 或 30000
+    /// - TimeoutAction: Fail（默认）/ Continue
     /// </summary>
     public class TimeoutMiddleware : IStepMiddleware
     {
         private readonly Action<string> _log;
 
+        /// <summary>
+        /// 创建超时中间件。
+        /// </summary>
+        /// <param name="log">日志委托。</param>
         public TimeoutMiddleware(Action<string> log)
         {
             _log = log ?? (s => { });

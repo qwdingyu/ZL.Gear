@@ -231,16 +231,35 @@ namespace ZL.Gear.Engine
                     break;
 
                 case WorkflowNodeType.Parallel:
+                    // Parallel 只承载「无测量载荷」的动作；Measure / 纯测量 ActionKey 必须走 ParallelMeasure。
                     if (node.Children != null && node.Children.Count > 0)
                     {
+                        if (TryGetIllegalParallelChild(node.Children, ctx.ActionResolver, out var illegalReason))
+                        {
+                            flow.Then(node.Description ?? "Parallel", (s, c) =>
+                                Task.FromResult<ExecutionResultBase>(ExecutionResult.Failed(illegalReason)));
+                            break;
+                        }
+
                         var parallelTasks = node.Children.Select(child => (child.Description, WrapActionWithArgs(child, ctx.ActionResolver))).ToArray();
                         flow.Parallel(node.Description, parallelTasks);
                     }
                     break;
 
                 case WorkflowNodeType.ParallelMeasure:
+                    // 并行测量：子节点应为 Measure；成功结果写入 MicroWorkflow 测量集合。
                     if (node.Children != null && node.Children.Count > 0)
                     {
+                        var illegal = node.Children.Find(c => c != null && c.Type != WorkflowNodeType.Measure);
+                        if (illegal != null)
+                        {
+                            var badName = string.IsNullOrWhiteSpace(illegal.Description) ? illegal.ActionKey : illegal.Description;
+                            flow.Then(node.Description ?? "ParallelMeasure", (s, c) =>
+                                Task.FromResult<ExecutionResultBase>(ExecutionResult.Failed(
+                                    $"配置错误：ParallelMeasure 子节点必须为 Measure（发现 '{badName}' Type={illegal.Type}）。")));
+                            break;
+                        }
+
                         var parallelTasks = node.Children.Select(child => (child.Description, WrapMeasurementWithArgs(child, ctx.ActionResolver))).ToArray();
                         flow.ParallelMeasure(node.Description, parallelTasks);
                     }
@@ -265,21 +284,93 @@ namespace ZL.Gear.Engine
         }
 
         /// <summary>
-        /// 【参数注入黑科技】
-        /// 创建一个闭包，在执行具体动作前，动态合并 JSON 中的 Args 到 StepConfig 中
+        /// 检查 Parallel 子节点是否非法：
+        /// 1) 显式 Measure；
+        /// 2) ActionKey 可解析为测量（含 Read/Query 等「Action+Measurement 双注册」——走 Action 会丢测量数据）。
+        /// 容器子节点（Sequence/Group，无 ActionKey）允许，由其内部自行编排 Measure。
+        /// </summary>
+        private static bool TryGetIllegalParallelChild(
+            IReadOnlyList<WorkflowNode> children,
+            IActionResolver resolver,
+            out string reason)
+        {
+            reason = null;
+            if (children == null) return false;
+
+            foreach (var child in children)
+            {
+                if (child == null) continue;
+
+                if (child.Type == WorkflowNodeType.Measure)
+                {
+                    var badName = string.IsNullOrWhiteSpace(child.Description) ? child.ActionKey : child.Description;
+                    reason = $"配置错误：Parallel 不能包含 Measure 子节点（'{badName}'）。请改用 ParallelMeasure。";
+                    return true;
+                }
+
+                // Sequence/Group 等容器无 ActionKey，允许作为 Parallel 分支（内部可再挂 Measure）
+                if (string.IsNullOrWhiteSpace(child.ActionKey) || resolver == null) continue;
+
+                MeasurementActionDelegate measure = null;
+                try
+                {
+                    measure = resolver.ResolveMeasurement(child.ActionKey);
+                }
+                catch (KeyNotFoundException)
+                {
+                    measure = null;
+                }
+                catch
+                {
+                    // 解析器异常留给后续执行路径
+                    continue;
+                }
+
+                // 只要能解析为测量，禁止直接挂在 Parallel 下（双注册时 Action 路径会丢 Measurement）
+                if (measure != null)
+                {
+                    reason =
+                        $"配置错误：Parallel 子节点 '{child.ActionKey}' 注册为测量动作（或 Action/Measurement 双注册）。" +
+                        "放入 Parallel 会丢失测量数据，请改用 ParallelMeasure，或放入 Sequence 容器内编排。";
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 【参数注入】创建闭包，在执行具体动作前动态合并 JSON 中的 Args 到 StepConfig。
         /// </summary>
         private ActionDelegate WrapActionWithArgs(WorkflowNode node, IActionResolver resolver)
         {
-            var targetAction = resolver.ResolveAction(node.ActionKey);
+            ActionDelegate targetAction = null;
+            try
+            {
+                targetAction = resolver.ResolveAction(node.ActionKey);
+            }
+            catch (KeyNotFoundException)
+            {
+                targetAction = null;
+            }
 
             // 策略增强：如果找不到普通动作，尝试查找同名的测量动作并包装
             if (targetAction == null)
             {
-                var targetMeasure = resolver.ResolveMeasurement(node.ActionKey);
+                MeasurementActionDelegate targetMeasure = null;
+                try
+                {
+                    targetMeasure = resolver.ResolveMeasurement(node.ActionKey);
+                }
+                catch (KeyNotFoundException)
+                {
+                    targetMeasure = null;
+                }
+
                 if (targetMeasure != null)
                 {
                     targetAction = async (s, c) => {
-                        var m = await targetMeasure(s, c);
+                        var m = await targetMeasure(s, c).ConfigureAwait(false);
                         return m.Success ? ExecutionResult.Succeeded(m.Message) : ExecutionResult.Failed(m.Message);
                     };
                 }
@@ -291,7 +382,7 @@ namespace ZL.Gear.Engine
                         var subConfig = (StepConfig)s.Clone();
                         subConfig.Parameters["Sequence"] = node.Children;
                         // 递归调用当前的 Handler
-                        return await this.ExecuteAsync(subConfig, c);
+                        return await this.ExecuteAsync(subConfig, c).ConfigureAwait(false);
                     };
                 }
             }
@@ -391,10 +482,23 @@ namespace ZL.Gear.Engine
         /// </summary>
         private MeasurementActionDelegate WrapMeasurementWithArgs(WorkflowNode node, IActionResolver resolver)
         {
-            var targetAction = resolver.ResolveMeasurement(node.ActionKey);
+            MeasurementActionDelegate targetAction = null;
+            try
+            {
+                targetAction = resolver.ResolveMeasurement(node.ActionKey);
+            }
+            catch (KeyNotFoundException)
+            {
+                targetAction = null;
+            }
 
             return async (originalStep, originalCtx) =>
             {
+                if (targetAction == null)
+                {
+                    return Measurement.Failed(node.ActionKey ?? "unknown", $"无法解析测量动作: {node.ActionKey}");
+                }
+
                 // 1. 作用域隔离
                 var nodeVariables = originalCtx.Variables.CreateChildScope();
 
@@ -424,7 +528,7 @@ namespace ZL.Gear.Engine
 
                 // 4. 执行
                 var nodeCtx = originalCtx.CreateChildContext(runtimeConfig, nodeVariables);
-                var result = await targetAction(runtimeConfig, nodeCtx);
+                var result = await targetAction(runtimeConfig, nodeCtx).ConfigureAwait(false);
 
                 // 5. Outputs 回写 (测量结果回写)
                 if (result.Success)

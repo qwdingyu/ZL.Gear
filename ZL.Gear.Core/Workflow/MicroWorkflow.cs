@@ -33,6 +33,10 @@ namespace ZL.Gear.Core.Workflow
         /// 流程级超时使用的 CancellationTokenSource，用于 DisposeAsync 时释放。
         /// </summary>
         private CancellationTokenSource _workflowTimeoutCts;
+        /// <summary>
+        /// 链接「外部取消 + 流程级超时」的 CTS；必须与 _workflowTimeoutCts 一并 Dispose，避免句柄泄漏。
+        /// </summary>
+        private CancellationTokenSource _workflowLinkedCts;
 
         private MicroWorkflow(StepConfig step, StepContext context)
         {
@@ -73,13 +77,19 @@ namespace ZL.Gear.Core.Workflow
         }
 
         /// <summary>
-        /// 为流程级超时创建链接令牌，不覆盖原始上下文令牌。
+        /// 为流程级超时创建链接令牌，不覆盖原始上下文令牌的语义（返回新 Token 供 WithToken 使用）。
+        /// 重复调用时会先释放上一套 CTS，避免 WorkflowTimeout 多次配置造成泄漏。
         /// </summary>
         private static CancellationToken CreateWorkflowTimeoutToken(MicroWorkflow workflow, StepContext context, int workflowTimeoutMs)
         {
-            var workflowTimeoutCts = new CancellationTokenSource(workflowTimeoutMs);
-            workflow._workflowTimeoutCts = workflowTimeoutCts;
-            return CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, workflowTimeoutCts.Token).Token;
+            workflow._workflowLinkedCts?.Dispose();
+            workflow._workflowTimeoutCts?.Dispose();
+
+            workflow._workflowTimeoutCts = new CancellationTokenSource(workflowTimeoutMs);
+            workflow._workflowLinkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                context.CancellationToken,
+                workflow._workflowTimeoutCts.Token);
+            return workflow._workflowLinkedCts.Token;
         }
 
         /// <summary>
@@ -635,7 +645,13 @@ namespace ZL.Gear.Core.Workflow
             }
             finally
             {
-                // 释放流程级超时使用的 CancellationTokenSource
+                // 释放流程级超时及其 Linked CTS（顺序：先 linked 再 timeout，与创建相反亦可，关键是都释放）
+                if (_workflowLinkedCts != null)
+                {
+                    _workflowLinkedCts.Dispose();
+                    _workflowLinkedCts = null;
+                }
+
                 if (_workflowTimeoutCts != null)
                 {
                     _workflowTimeoutCts.Dispose();

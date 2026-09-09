@@ -419,7 +419,8 @@ namespace ZL.Gear.Engine.Runner
                     else
                     {
                         stepResult.Message = measurementResult.Message;
-                        _log($"[诊断] 步骤 {stepConfig.StepName} 产生 {ValueCount} 条测量数据");
+                        // 详细诊断仅 Debug，避免产线 Info 刷屏；关键评估结果仍用 Info（见下方）
+                        _logger?.LogDebug("[诊断] 步骤 {StepName} 产生 {ValueCount} 条测量数据", stepConfig.StepName, ValueCount);
 
                         stepResult.Status = StepExecutionStatus.Completed;
 
@@ -433,12 +434,16 @@ namespace ZL.Gear.Engine.Runner
                         {
                             // 3. 评估结果（使用重构后的评估器）
                             var evaluationResult = (_resultEvaluator ?? ResultEvaluator.Instance).Evaluate(stepResult, stepConfig);
-                            _log($"[诊断] 评估详情: ExecutionType={stepConfig.ExecutionType}, ExpectedResults.Count={stepConfig.ExpectedResults?.Count ?? 0}");
-                            _log($"[诊断] stepResult.Status={stepResult.Status}, stepResult.Outcome={stepResult.Outcome}");
-                            _log($"[诊断] 评估结果: Success={evaluationResult.Success}, Message={evaluationResult.Message}");
-                            _log($"[诊断] 即将设置 stepResult.Outcome");
+                            _logger?.LogDebug(
+                                "[诊断] 评估详情: ExecutionType={ExecutionType}, ExpectedResults.Count={ExpectedCount}, Status={Status}, Outcome={Outcome}, Success={Success}, Message={Message}",
+                                stepConfig.ExecutionType,
+                                stepConfig.ExpectedResults?.Count ?? 0,
+                                stepResult.Status,
+                                stepResult.Outcome,
+                                evaluationResult.Success,
+                                evaluationResult.Message);
+
                             stepResult.Outcome = evaluationResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
-                            _log($"[诊断] 已设置 stepResult.Outcome={stepResult.Outcome}");
 
                             // 使用评估器的详细消息
                             if (!string.IsNullOrEmpty(evaluationResult.Message))
@@ -534,14 +539,15 @@ namespace ZL.Gear.Engine.Runner
 
                     if (stepMapping.TryGetValue(subResult.StepKey, out var subConfig))
                     {
-                        var subContext = parentContext.CreateChildContext((StepConfig)subConfig.Clone());
-                        // 使用新的 subContext 进行调用
-                        await ExecuteStepRecursiveAsync(subConfig, subResult, subContext);
+                        // 串行亦使用 clone，避免 Normalize 污染后续复用/重跑的同一配置树
+                        var clonedConfig = (StepConfig)subConfig.Clone();
+                        var subContext = parentContext.CreateChildContext(clonedConfig);
+                        await ExecuteStepRecursiveAsync(clonedConfig, subResult, subContext);
 
                         // 如果子步骤失败且设置了StopByFail，则不再继续执行后续的兄弟步骤
-                        if (subResult.Outcome != StepOutcome.Passed && subConfig.StopByFail)
+                        if (subResult.Outcome != StepOutcome.Passed && clonedConfig.StopByFail)
                         {
-                            _log($"[停止] 因步骤 '{subConfig.StepName}' 失败且设置了 StopByFail，停止执行后续兄弟步骤");
+                            _log($"[停止] 因步骤 '{clonedConfig.StepName}' 失败且设置了 StopByFail，停止执行后续兄弟步骤");
                             break;
                         }
                     }

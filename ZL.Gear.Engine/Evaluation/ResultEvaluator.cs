@@ -115,10 +115,11 @@ namespace ZL.Gear.Engine.Evaluation
                     continue;
                 }
 
-                // --- 核心判定 ---
+                // --- 核心判定（Offset 等补偿在 CheckNumeric 内已参与 Pass/Fail）---
                 var checkResult = CheckSingleSpec(spec, measurement);
 
-                // 如果有补偿值，创建新的测量对象 (不可变设计)
+                // 补偿后的值仅用于本轮判定消息上下文；故意不回写 stepResult.StepMeasurements。
+                // ATE 常见语义：原始采样入库可追溯，补偿只影响规格判定（勿在此强制改写落库值）。
                 if (checkResult.CompensatedValue != null)
                 {
                     measurement = Measurement.Create(

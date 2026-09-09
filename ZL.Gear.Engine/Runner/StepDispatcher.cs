@@ -341,7 +341,8 @@ namespace ZL.Gear.Engine.Runner
         /// <returns>执行结果。</returns>
         /// <remarks>
         /// 查找顺序：注册表专用 Handler → DSL 模板 Handler → 通用设备调用回退。
-        /// 超时采用步骤级独立 CancellationTokenSource，并与上下文令牌链接。
+        /// 步骤超时由此方法统一施加（Parameters.TimeoutMs / step.TimeoutMs / 默认值），
+        /// 并支持 Parameters.TimeoutAction=Fail|Continue；预设管道不再挂 TimeoutMiddleware。
         /// </remarks>
         private async Task<ExecutionResult<List<Measurement>>> DispatchCoreAsync(StepConfig step, StepContext context)
         {
@@ -376,15 +377,32 @@ namespace ZL.Gear.Engine.Runner
                 handler = _handlerLookup.GetFallbackHandler(step);
             }
 
-            // 2. 设置本步骤的独立超时
-            using var stepTimeoutCts = new CancellationTokenSource(step.TimeoutMs > 0 ? step.TimeoutMs : _defaultTimeoutMs);
+            // 2. 步骤超时（全仓唯一权威：预设管道不再叠加 TimeoutMiddleware）
+            // 优先级：Parameters.TimeoutMs > step.TimeoutMs > 构造注入默认值
+            int timeoutMs = step.TimeoutMs > 0 ? step.TimeoutMs : _defaultTimeoutMs;
+            if (step.Parameters != null
+                && step.Parameters.TryGetValue("TimeoutMs", out var timeoutObj)
+                && int.TryParse(timeoutObj?.ToString(), out var paramTimeout)
+                && paramTimeout > 0)
+            {
+                timeoutMs = paramTimeout;
+            }
+
+            // TimeoutAction：Fail（默认，返回失败）/ Continue（记超时但仍 Success，工业场景慎用）
+            string timeoutAction = "Fail";
+            if (step.Parameters != null && step.Parameters.TryGetValue("TimeoutAction", out var timeoutActionObj))
+            {
+                timeoutAction = timeoutActionObj?.ToString() ?? "Fail";
+            }
+
+            using var stepTimeoutCts = new CancellationTokenSource(timeoutMs);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken, stepTimeoutCts.Token);
             var newContext = context.WithToken(linkedCts.Token);
 
             // 3. 执行并规范化返回类型
             try
             {
-                var rawResult = await handler.ExecuteAsync(step, newContext);
+                var rawResult = await handler.ExecuteAsync(step, newContext).ConfigureAwait(false);
                 _log($"[DispatchCoreAsync] step={step.StepName}, command={step.Command}, handler={handler.GetType().FullName}, success={rawResult.Success}, message={rawResult.Message}");
 
                 // 已经是列表结果，直接返回
@@ -404,6 +422,21 @@ namespace ZL.Gear.Engine.Runner
                     return ExecutionResult<List<Measurement>>.Failed(rawResult.Message, new List<Measurement> { failSingle });
 
                 return ExecutionResult<List<Measurement>>.Failed(rawResult.Message);
+            }
+            catch (OperationCanceledException) when (stepTimeoutCts.IsCancellationRequested && !context.CancellationToken.IsCancellationRequested)
+            {
+                // 本步骤超时（非上层取消）
+                _log($"[Timeout] 步骤 '{step.StepName}' 执行超时 ({timeoutMs}ms), TimeoutAction={timeoutAction}");
+                if (string.Equals(timeoutAction, "Continue", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Continue：不中断序列，但测量为空——后续 Verify 仍可能因缺数据失败（偏安全）
+                    return ExecutionResult<List<Measurement>>.Succeeded(
+                        new List<Measurement>(),
+                        0,
+                        $"步骤执行超时 ({timeoutMs}ms)");
+                }
+
+                return ExecutionResult<List<Measurement>>.Failed($"步骤执行超时 ({timeoutMs}ms)");
             }
             catch (OperationCanceledException)
             {
