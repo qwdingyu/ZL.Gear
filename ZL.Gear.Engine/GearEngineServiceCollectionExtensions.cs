@@ -69,7 +69,8 @@ namespace ZL.Gear.Engine
                     handlerFactory,
                     actionRegistry,
                     pipeline,
-                    log);
+                    log,
+                    builtInModules: options.BuiltInModules);
             });
 
             return services;
@@ -95,5 +96,11 @@ namespace ZL.Gear.Engine
         /// 是否使用 DI 工厂创建 Handler
         /// </summary>
         public bool UseDiFactory { get; set; } = false;
+
+        /// <summary>
+        /// 内置模块掩码（默认 All = Core+Sensing+Plc+Ai）。
+        /// 瘦宿主可设为 <see cref="BuiltInModules.Core"/>；见 docs/138。
+        /// </summary>
+        public BuiltInModules BuiltInModules { get; set; } = BuiltInModules.All;
     }
 }

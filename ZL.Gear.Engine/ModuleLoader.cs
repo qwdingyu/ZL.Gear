@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.BuiltIn;
 using ZL.Gear.Engine.Handlers;
 using ZL.Gear.Engine.Runner;
-using ZL.Gear.Drivers.Plc.Handlers;
 using ZL.Gear.Sensing.LinkageMeasurement;
 
 namespace ZL.Gear.Engine
@@ -17,14 +17,29 @@ namespace ZL.Gear.Engine
     /// 模块加载器。
     /// 职责：专职负责扫描程序集、加载插件、识别 Bootstrapper，并向注册表注册 Handler 和动作。
     /// 设计要点：
-    /// 1. 内置 Handler 注册逻辑已提取为 <see cref="RegisterBuiltInHandlers"/> 静态方法，
-    ///    由 <see cref="StepDispatcher"/> 或宿主在 Composition Root 处显式调用；
-    /// 2. 支持三种模块源：插件目录路径、Assembly 实例、<see cref="IGearExtension"/> 实例；
-    /// 3. 插件支持命名空间隔离（通过 <see cref="PluginManifest.CommandPrefix"/>）；
-    /// 4. 优先使用显式 Bootstrapper（IGearExtension），避免隐式扫描导致的重复注册。
+    /// 1. 内置模块通过 <see cref="RegisterBuiltInHandlers"/> 按 <see cref="BuiltInModules"/> 显式勾选
+    ///    （AddCore / AddSensing / AddPlc / AddAi）；默认 <see cref="BuiltInModules.All"/> 保持产线行为；
+    /// 2. <see cref="StepDispatcher"/> 构造时会调用本方法（可传入模块掩码）；
+    /// 3. 支持三种模块源：插件目录路径、Assembly 实例、<see cref="IGearExtension"/> 实例；
+    /// 4. 插件支持命名空间隔离（通过 <see cref="PluginManifest.CommandPrefix"/>）；
+    /// 5. 优先使用显式 Bootstrapper（IGearExtension），避免隐式扫描导致的重复注册。
     /// </summary>
     internal class ModuleLoader
     {
+        /// <summary>
+        /// 按「动作注册表」实例记录已注册模块位。
+        /// 选用 ActionRegistry 而非 StepDispatcher 作键：同一动作表上重复 RegisterAction 会 ThrowIfExists；
+        /// 宿主通常单例 Dispatcher，共享动作表时后建 Dispatcher 若请求已注册过的位将整段跳过（其 Handler 表可能无 DynamicFlow）——产线请保持 Dispatcher 单例。
+        /// </summary>
+        private static readonly ConditionalWeakTable<object, RegisteredModulesState> _registeredByActionRegistry =
+            new ConditionalWeakTable<object, RegisteredModulesState>();
+
+        /// <summary>单个 ActionRegistry 上的已注册掩码（需与注册过程同锁保护）。</summary>
+        private sealed class RegisteredModulesState
+        {
+            public BuiltInModules Mask;
+        }
+
         /// <summary>
         /// 步骤处理器注册表。
         /// </summary>
@@ -51,11 +66,6 @@ namespace ZL.Gear.Engine
         private readonly Action<string> _log;
 
         /// <summary>
-        /// 内置 Handler 是否已注册（避免重复注册）。
-        /// </summary>
-        private static int _builtInRegistered;
-
-        /// <summary>
         /// 初始化模块加载器。
         /// </summary>
         /// <param name="registry">步骤处理器注册表。</param>
@@ -78,78 +88,166 @@ namespace ZL.Gear.Engine
         }
 
         /// <summary>
-        /// 注册框架内置的通用 Handler 与动作。
-        /// 关键点：此方法不再由 <see cref="StepDispatcher"/> 构造函数隐式调用，
-        /// 而是由 Composition Root 显式调用，确保注册顺序可控。
+        /// 按模块掩码注册框架内置 Handler / 动作（docs/138 微动）。
+        /// 默认 <see cref="BuiltInModules.All"/>，与历史「构造即全注册」行为一致。
         /// </summary>
-        /// <param name="registry">步骤处理器注册表。</param>
-        /// <param name="actionRegistry">动作注册表。</param>
+        /// <remarks>
+        /// <para>
+        /// <b>幂等键</b>：同一 <paramref name="actionRegistry"/> 上已置位的模块不会再次执行对应 Add*，
+        /// 避免 StandardActions 二次 <c>RegisterAction</c> 抛错。
+        /// </para>
+        /// <para>
+        /// <b>并发</b>：计算 pending、执行 Add*、写回 Mask 均在同一把锁内，避免双线程同时 AddCore。
+        /// </para>
+        /// <para>
+        /// <b>增量勾选</b>：可先 <c>Core</c> 再对<b>同一</b> <paramref name="registry"/> + <paramref name="actionRegistry"/>
+        /// 调用 <c>Sensing</c>，Handler 会挂到同一 Dispatcher。若第二次 new 了另一个 Dispatcher，
+        /// 则新增 Handler 只挂在新实例上（动作仍写入共享 ActionRegistry）。
+        /// </para>
+        /// </remarks>
+        /// <param name="registry">步骤处理器注册表（通常即 StepDispatcher）。</param>
+        /// <param name="actionRegistry">动作/测量注册表。</param>
         /// <param name="handlerFactory">Handler 工厂。</param>
         /// <param name="log">日志输出委托。</param>
+        /// <param name="modules">要注册的内置模块；默认 All。</param>
         /// <exception cref="ArgumentNullException">任意参数为 null。</exception>
         public static void RegisterBuiltInHandlers(
             IStepHandlerRegistry registry,
             IActionRegistry actionRegistry,
             IStepHandlerFactory handlerFactory,
-            Action<string> log)
+            Action<string> log,
+            BuiltInModules modules = BuiltInModules.All)
         {
             if (registry == null) throw new ArgumentNullException(nameof(registry));
             if (actionRegistry == null) throw new ArgumentNullException(nameof(actionRegistry));
             if (handlerFactory == null) throw new ArgumentNullException(nameof(handlerFactory));
             if (log == null) throw new ArgumentNullException(nameof(log));
 
-            // 避免重复注册：即使 StepDispatcher 被多次创建，内置 Handler 也仅注册一次。
-            if (System.Threading.Interlocked.CompareExchange(ref _builtInRegistered, 1, 0) == 1)
+            if (modules == BuiltInModules.None)
             {
-                log("[ModuleLoader] 内置 Handler 已注册，跳过重复初始化。");
+                log("[ModuleLoader] BuiltInModules.None：跳过内置注册。");
                 return;
             }
 
-            log("[ModuleLoader] 注册内置 Handler...");
+            var state = _registeredByActionRegistry.GetOrCreateValue(actionRegistry);
 
-            // 标准动作（如 Start/Stop/Reset 等通用操作）
-            var standardProvider = new StandardActionsProvider();
-            standardProvider.RegisterActions(actionRegistry);
+            // 必须在锁内完成「算 pending → Add* → 置 Mask」，否则双构造可能并发 AddCore。
+            lock (state)
+            {
+                var pending = modules & ~state.Mask;
+                if (pending == BuiltInModules.None)
+                {
+                    log($"[ModuleLoader] 内置模块已在本 ActionRegistry 注册过（已有={state.Mask}，请求={modules}），跳过。");
+                    return;
+                }
 
-            // 通用动作（如日志、延迟、变量读写等）
-            var universalProvider = new UniversalActionProvider();
-            universalProvider.RegisterActions(actionRegistry);
+                log($"[ModuleLoader] 注册内置模块: 请求={modules}，待注册={pending}");
 
-            // 核心处理器：DynamicFlow（JSON DSL 解释器）
+                if ((pending & BuiltInModules.Core) != 0)
+                {
+                    AddCore(registry, actionRegistry, log);
+                }
+
+                if ((pending & BuiltInModules.Sensing) != 0)
+                {
+                    AddSensing(registry, actionRegistry, log);
+                }
+
+                if ((pending & BuiltInModules.Plc) != 0)
+                {
+                    AddPlc(registry, actionRegistry, handlerFactory, log);
+                }
+
+                if ((pending & BuiltInModules.Ai) != 0)
+                {
+                    AddAi(registry, log);
+                }
+
+                state.Mask |= pending;
+                log($"[ModuleLoader] 内置模块注册完成（本 ActionRegistry 累计={state.Mask}）");
+            }
+        }
+
+        /// <summary>
+        /// 查询某动作注册表上已注册的内置模块掩码（测试/诊断用）。
+        /// </summary>
+        public static BuiltInModules GetRegisteredMask(IActionRegistry actionRegistry)
+        {
+            if (actionRegistry == null) return BuiltInModules.None;
+            if (_registeredByActionRegistry.TryGetValue(actionRegistry, out var state))
+            {
+                lock (state) return state.Mask;
+            }
+
+            return BuiltInModules.None;
+        }
+
+        /// <summary>
+        /// AddCore：逻辑 DSL + DynamicFlow + 演示 Handler。
+        /// 不含 GenericMeasure（见 <see cref="AddSensing"/>）。
+        /// </summary>
+        private static void AddCore(
+            IStepHandlerRegistry registry,
+            IActionRegistry actionRegistry,
+            Action<string> log)
+        {
+            log("[ModuleLoader] AddCore：StandardActions / DynamicFlow / MicroWorkflowDemo");
+            // 标准动作含逻辑子集与设备元语 Write/Read/Query；延迟别名 Delay 使用 Ignore 策略。
+            new StandardActionsProvider().RegisterActions(actionRegistry);
+
+            // JSON 微流程主入口（步内 L-DSL）
             var dynamicHandler = new DynamicFlowHandler();
             registry.RegisterHandlerWithAction("DynamicFlow", dynamicHandler);
 
-            // PLC 通用操作（所有项目都可使用，如果找到 ZL.Gear.Drivers 程序集）
-            RegisterHandlerIfExists(registry, actionRegistry, handlerFactory, log,
-                "ZL.Gear.Drivers", "PlcStepHandler",
-                "SetupPlcRelay", "StopPlcRelay", "WriteToPlc", "ReadFromPlc", "PlcDelay");
-
-            // 主从联动测量处理器
-            var triggeredMeasureHandler = new LinkageMeasureHandler(log);
-            registry.RegisterHandlerWithAction("TriggeredMeasure", triggeredMeasureHandler, allowOverwrite: false);
-
-            // MicroWorkflow 综合演示处理器
+            // Fluent 综合演示 + Mock ActionKey（非产线配方）
             var microWorkflowDemoHandler = new MicroWorkflowDemoHandler(log);
             registry.RegisterHandlerWithAction("MicroWorkflowDemo", microWorkflowDemoHandler, allowOverwrite: false);
             MicroWorkflowDemoActions.Register(actionRegistry, log);
+        }
 
-            // AI 决策处理器
+        /// <summary>
+        /// AddSensing：万能测量与主从联动测量（硬依赖 Sensing 类型）。
+        /// </summary>
+        private static void AddSensing(
+            IStepHandlerRegistry registry,
+            IActionRegistry actionRegistry,
+            Action<string> log)
+        {
+            log("[ModuleLoader] AddSensing：UniversalActionProvider / TriggeredMeasure");
+            new UniversalActionProvider().RegisterActions(actionRegistry);
+
+            var triggeredMeasureHandler = new LinkageMeasureHandler(log);
+            registry.RegisterHandlerWithAction("TriggeredMeasure", triggeredMeasureHandler, allowOverwrite: false);
+        }
+
+        /// <summary>
+        /// AddPlc：仅当 Drivers 已加载时反射注册；失败只打日志，不抛（软依赖）。
+        /// </summary>
+        private static void AddPlc(
+            IStepHandlerRegistry registry,
+            IActionRegistry actionRegistry,
+            IStepHandlerFactory handlerFactory,
+            Action<string> log)
+        {
+            log("[ModuleLoader] AddPlc：条件注册 PlcStepHandler 命令族");
+            RegisterHandlerIfExists(registry, actionRegistry, handlerFactory, log,
+                "ZL.Gear.Drivers", "PlcStepHandler",
+                "SetupPlcRelay", "StopPlcRelay", "WriteToPlc", "ReadFromPlc", "PlcHandshake", "PlcDelay");
+        }
+
+        /// <summary>
+        /// AddAi：挂载 AiDecision 命令；策略注入与否在执行期判定。
+        /// </summary>
+        private static void AddAi(IStepHandlerRegistry registry, Action<string> log)
+        {
+            log("[ModuleLoader] AddAi：AiDecision");
             var aiHandler = new AiDecisionStepHandler();
             registry.RegisterHandlerWithAction("AiDecision", aiHandler);
-
-            log("[ModuleLoader] 内置 Handler 注册完成");
         }
 
         /// <summary>
         /// 条件注册 Handler：如果指定程序集中存在指定类型，则注册其命令映射。
         /// </summary>
-        /// <param name="registry">注册表。</param>
-        /// <param name="actionRegistry">动作注册表。</param>
-        /// <param name="handlerFactory">Handler 工厂。</param>
-        /// <param name="log">日志输出委托。</param>
-        /// <param name="assemblyName">程序集名称。</param>
-        /// <param name="className">类型名称。</param>
-        /// <param name="commandNames">要注册的命令名称列表。</param>
         private static void RegisterHandlerIfExists(
             IStepHandlerRegistry registry,
             IActionRegistry actionRegistry,

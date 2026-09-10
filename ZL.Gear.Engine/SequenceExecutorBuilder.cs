@@ -63,6 +63,7 @@ namespace ZL.Gear.Engine
         private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
         private bool _enableUnknownCommandWarning = true;
         private int _defaultStepTimeoutMs = 30000;
+        private BuiltInModules _builtInModules = BuiltInModules.All;
         private bool _built;
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
@@ -88,6 +89,20 @@ namespace ZL.Gear.Engine
         public SequenceExecutorBuilder WithDefaultStepTimeoutMs(int timeoutMs)
         {
             if (timeoutMs > 0) _defaultStepTimeoutMs = timeoutMs;
+            return this;
+        }
+
+        /// <summary>
+        /// 显式勾选内置模块（docs/138 微动）。默认 <see cref="BuiltInModules.All"/>。
+        /// </summary>
+        /// <remarks>
+        /// 仅逻辑 DSL 宿主可传 <see cref="BuiltInModules.Core"/>，避免挂上 Sensing/PLC/AI。
+        /// 不改变 Engine 程序集引用图；只影响运行期注册表内容。
+        /// </remarks>
+        /// <param name="modules">模块掩码。</param>
+        public SequenceExecutorBuilder WithBuiltInModules(BuiltInModules modules)
+        {
+            _builtInModules = modules;
             return this;
         }
 
@@ -383,7 +398,8 @@ namespace ZL.Gear.Engine
                     pipeline,
                     log,
                     _enableUnknownCommandWarning,
-                    _defaultStepTimeoutMs);
+                    _defaultStepTimeoutMs,
+                    _builtInModules);
             });
 
             // 暴露 IStepHandlerRegistry 接口（由 StepDispatcher 实现），
@@ -525,54 +541,23 @@ namespace ZL.Gear.Engine
     }
 
     /// <summary>
-    /// 简单的工作流评估器 - 默认实现
+    /// 简单工作流评估器：委托正式 WorkflowEvaluator，避免与 docs/133 方言分叉。
     /// </summary>
     public class SimpleWorkflowEvaluator : IWorkflowEvaluator
     {
+        private readonly WorkflowEvaluator _inner = new WorkflowEvaluator();
+
         public bool EvaluateCondition(string expression, IDictionary<string, object> variables)
-        {
-            if (string.IsNullOrWhiteSpace(expression)) return true;
-
-            // 支持简单的布尔变量名直接匹配（不区分大小写）
-            if (variables != null && variables.TryGetValue(expression, out var value))
-            {
-                if (value is bool boolValue) return boolValue;
-                if (value != null) return Convert.ToBoolean(value);
-            }
-
-            // 支持 "key == value" / "key != value" 简单比较
-            var trimmed = expression.Trim();
-            if (trimmed.StartsWith("!") && variables != null && variables.TryGetValue(trimmed.Substring(1), out var negValue))
-            {
-                if (negValue is bool negBool) return !negBool;
-                if (negValue != null) return !Convert.ToBoolean(negValue);
-            }
-
-            return true;
-        }
+            => _inner.EvaluateCondition(expression, variables);
 
         public object EvaluateValue(object input, IDictionary<string, object> variables)
-        {
-            return input;
-        }
+            => _inner.EvaluateValue(input, variables);
 
         public object EvaluateExpression(string expression, IDictionary<string, object> variables)
-        {
-            // 委托真评估器，避免 Simple 桩导致 Calculate 静默失效
-            return new WorkflowEvaluator().EvaluateExpression(expression, variables);
-        }
+            => _inner.EvaluateExpression(expression, variables);
 
         public string Interpolate(string template, IDictionary<string, object> variables)
-        {
-            if (string.IsNullOrEmpty(template)) return template;
-
-            var result = template;
-            foreach (var kvp in variables)
-            {
-                result = result.Replace($"${{{kvp.Key}}}", kvp.Value?.ToString() ?? "");
-            }
-            return result;
-        }
+            => _inner.Interpolate(template, variables);
     }
 
     /// <summary>

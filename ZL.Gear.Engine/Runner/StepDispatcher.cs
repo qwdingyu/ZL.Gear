@@ -21,8 +21,8 @@ namespace ZL.Gear.Engine.Runner
     /// 1. 依赖 <see cref="IStepHandlerLookup"/> 决定使用哪个 Handler；
     /// 2. 依赖 <see cref="IStepHandlerFactory"/> 创建 Handler 实例；
     /// 3. 依赖 <see cref="StepExecutionPipeline"/> 执行中间件链；
-    /// 4. 内置 Handler 注册逻辑已迁移至 <see cref="ZL.Gear.Engine.ModuleLoader.RegisterBuiltInHandlers"/>，
-    ///    避免构造函数膨胀，符合单一职责原则。
+    /// 4. 内置 Handler 由 <see cref="ModuleLoader.RegisterBuiltInHandlers"/> 按
+    ///    <see cref="BuiltInModules"/> 显式勾选（默认 All）；
     /// </summary>
     public class StepDispatcher : IStepHandlerRegistry
     {
@@ -72,15 +72,30 @@ namespace ZL.Gear.Engine.Runner
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _parameterSchemas = new();
 
         /// <summary>
-        /// 兼容旧代码的构造函数。
-        /// 使用默认的 <see cref="RegistryStepHandlerLookup"/> 和 <see cref="DefaultStepHandlerFactory"/>，
-        /// 并自动注册所有内置 Handler。
+        /// 本分发器构造时请求的内置模块掩码（实际是否执行 Add* 还受 ActionRegistry 幂等状态约束）。
         /// </summary>
+        private readonly BuiltInModules _builtInModules;
+
+        /// <summary>
+        /// 兼容旧代码的构造函数。
+        /// 使用默认 Lookup/Factory，并按 <paramref name="builtInModules"/> 注册内置能力（默认 All）。
+        /// </summary>
+        /// <remarks>
+        /// 产线请保持 <b>ActionRegistry + StepDispatcher 单例</b>：
+        /// 若多个 Dispatcher 共享同一 ActionRegistry，后建实例在模块位已置齐时会跳过注册，
+        /// 其自身 Handler 表可能缺少 DynamicFlow。
+        /// </remarks>
         /// <param name="actionService">动作注册表。</param>
         /// <param name="log">日志输出委托。</param>
         /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
         /// <param name="defaultTimeoutMs">步骤未显式配置 TimeoutMs 时的默认超时（毫秒），默认 30000；非正值回退默认。</param>
-        public StepDispatcher(IActionRegistry actionService, Action<string> log, bool enableUnknownCommandWarning = true, int defaultTimeoutMs = 30000)
+        /// <param name="builtInModules">内置模块掩码；默认 <see cref="BuiltInModules.All"/> 保持产线行为。</param>
+        public StepDispatcher(
+            IActionRegistry actionService,
+            Action<string> log,
+            bool enableUnknownCommandWarning = true,
+            int defaultTimeoutMs = 30000,
+            BuiltInModules builtInModules = BuiltInModules.All)
             : this(
                 CreateDefaultLookup(log),
                 new DefaultStepHandlerFactory(),
@@ -88,12 +103,13 @@ namespace ZL.Gear.Engine.Runner
                 new StepPipelineBuilder().UseDefaultPipeline().Build(),
                 log,
                 enableUnknownCommandWarning,
-                defaultTimeoutMs)
+                defaultTimeoutMs,
+                builtInModules)
         {
         }
 
         /// <summary>
-        /// 新构造函数，支持依赖注入。
+        /// 支持依赖注入的完整构造函数。
         /// </summary>
         /// <param name="handlerLookup">Handler 查找策略。</param>
         /// <param name="handlerFactory">Handler 工厂。</param>
@@ -102,6 +118,7 @@ namespace ZL.Gear.Engine.Runner
         /// <param name="log">日志输出委托。</param>
         /// <param name="enableUnknownCommandWarning">未知命令走通用回退时是否输出诊断警告日志，默认 true。</param>
         /// <param name="defaultTimeoutMs">步骤未显式配置 TimeoutMs 时的默认超时（毫秒），默认 30000；非正值回退默认。</param>
+        /// <param name="builtInModules">内置模块掩码；默认 All（Core+Sensing+Plc+Ai）。</param>
         /// <exception cref="ArgumentNullException">任意依赖项为 null。</exception>
         public StepDispatcher(
             IStepHandlerLookup handlerLookup,
@@ -110,7 +127,8 @@ namespace ZL.Gear.Engine.Runner
             StepExecutionPipeline pipeline,
             Action<string> log,
             bool enableUnknownCommandWarning = true,
-            int defaultTimeoutMs = 30000)
+            int defaultTimeoutMs = 30000,
+            BuiltInModules builtInModules = BuiltInModules.All)
         {
             _handlerLookup = handlerLookup ?? throw new ArgumentNullException(nameof(handlerLookup));
             _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
@@ -119,13 +137,15 @@ namespace ZL.Gear.Engine.Runner
             _log = log ?? (s => { });
             _enableUnknownCommandWarning = enableUnknownCommandWarning;
             _defaultTimeoutMs = defaultTimeoutMs > 0 ? defaultTimeoutMs : 30000;
+            _builtInModules = builtInModules;
 
-            // 注册框架内置的通用 Handler 与动作
+            // 组合根：按掩码显式注册（内部再拆 AddCore/AddSensing/AddPlc/AddAi）
             ModuleLoader.RegisterBuiltInHandlers(
                 this,
                 _actionRegistry,
                 _handlerFactory,
-                _log);
+                _log,
+                _builtInModules);
 
             ValidateNoConflicts();
         }
