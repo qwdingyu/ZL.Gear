@@ -282,7 +282,7 @@ public void FixedLengthSplitter_正常分帧测试()
 ## 8. 注意事项
 
 - 项目使用 .NET Standard 2.0，需注意 API 兼容性
-- 部分项目引用了 `libs/` 目录下的外部 DLL
+- 部分项目引用了 `libs/` 目录下的外部 DLL（**禁止提交**；见 `libs/README.md`）
 - 某些设备驱动需要硬件支持才能完整测试
 - 关注 `NotImplementedException` 和 `TODO` 注释
 - 修改公共 API 时需更新 XML 文档注释

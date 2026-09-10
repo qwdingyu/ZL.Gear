@@ -87,3 +87,8 @@ Reports/
 ZL.Gear.ConsoleApp/Scenarios/Generated/
 
 .tmp/
+
+# === 私有/闭源本地依赖（禁止提交二进制）===
+# 构建 Seat / Bus / Communication 部分能力前，按 libs/README.md 自行放置 DLL
+libs/**
+!libs/README.md
