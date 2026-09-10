@@ -10,12 +10,13 @@ namespace ZL.Gear.Core.Workflow
     public interface IWorkflowEvaluator
     {
         /// <summary>
-        /// 评估一个布尔表达式（如 "Vars['Volt'] > 12.0"）。
+        /// 评估一个布尔表达式（如 "Ready" 或 "Margin > 0"；逃逸仍可用 Vars）。
+        /// 官方方言见 docs/133。
         /// </summary>
         bool EvaluateCondition(string expression, IDictionary<string, object> variables);
 
         /// <summary>
-        /// 评估一个值表达式（如 "@Vars['V1'] * 1.5"）。失败时返回原输入（兼容插值宽松路径）。
+        /// 评估一个值表达式（如 "@LimitOhm * 1.5"）。失败时返回原输入（兼容插值宽松路径）。
         /// </summary>
         object EvaluateValue(object input, IDictionary<string, object> variables);
 

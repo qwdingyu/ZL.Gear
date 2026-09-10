@@ -19,13 +19,13 @@ namespace ZL.Gear.Core.Workflow
         public string Description { get; set; }
 
         /// <summary>
-        /// 节点级条件表达式（如 "Vars['EnableStep'] == true"）。
+        /// 节点级条件表达式（如 "EnableStep == true" 或 "Ready"；见 docs/133）。
         /// <para>
         /// 语义分层（务必区分，避免漏检）：
         /// <list type="bullet">
         /// <item><see cref="WorkflowNodeType.WaitUntil"/>：运行时轮询条件。</item>
         /// <item>其它节点类型：构建期守卫，仅可读流程启动前已注入的 Variables；
-        /// 依赖前序节点 <see cref="OutputKey"/> 的运行时判定，请使用 Assert 的 Args.Condition。</item>
+        /// 依赖前序节点 <see cref="OutputKey"/> 的运行时判定，请使用 Assert 的 Check / Left+Op（或 L2 Condition）。</item>
         /// </list>
         /// </para>
         /// </summary>
@@ -43,7 +43,7 @@ namespace ZL.Gear.Core.Workflow
 
         /// <summary>
         /// 输入变量映射 (逻辑名 -> 表达式/变量名)
-        /// 例如: { "TargetVolt": "Vars['BaseVolt'] + 2" }
+        /// 例如: { "TargetVolt": "BaseVolt + 2" }
         /// </summary>
         public Dictionary<string, object> Inputs { get; set; } = new();
 

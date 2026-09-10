@@ -21,8 +21,8 @@
 | F4–F6 | 全量橱窗 / 污染 Calculate / Timeout |
 | F7–F13 | RightVar、Op 矩阵、字符串 Eq、Vars 逃逸、Calculate 失败、WaitUntil 超时、Right 互斥 |
 | P1–P3 | Check 解析、拒算术、边界健壮性（无空格/科学计数/转义/中文 ident/超长） |
-| F14–F15 | L1 Check 端到端+互斥；L0 Op 符号别名 `<=` |
+| F14–F16 | L1 Check 端到端+互斥；L0 Op 符号别名 `<=`；**空 Assert 不得误 PASS** |
 
 ## C. 延后
 
-行业 JSON 批量、Sampling `val`、真机 ParallelMeasure — 不挡方言落地。
+Sampling `val`、真机 ParallelMeasure — 不挡方言落地。行业官方 JSON 已切 Check/裸标识符（见 ConsoleApp Scenarios）。

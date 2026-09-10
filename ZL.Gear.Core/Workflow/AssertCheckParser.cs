@@ -2,13 +2,11 @@ using System;
 using System.Globalization;
 using System.Text;
 
-namespace ZL.Gear.ExprDialectProof
+namespace ZL.Gear.Core.Workflow
 {
     /// <summary>
-    /// L1：将 Check 一行比较式反糖化为 L0（Left/Op/Right|RightVar）。
-    /// 文法：Ident Cmp (Ident | Number | true|false | "string")
-    /// Cmp：>=|<=|==|!=|>|&lt;（长的优先）；亦接受 &lt;&gt;、单 =（归一为 Neq/Eq）
-    /// 标识符仅 ASCII（与过滤提升规则一致）；禁止算术/函数/括号/科学计数法。
+    /// L1：将 Check 一行比较式反糖化为 L0（Left/Op/Right|RightVar）。docs/133。
+    /// 文法：Ident Cmp (Ident | Number | true|false | "string")；标识符仅 ASCII。
     /// </summary>
     public static class AssertCheckParser
     {

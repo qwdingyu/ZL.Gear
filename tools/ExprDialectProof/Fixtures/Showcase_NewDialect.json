@@ -1,7 +1,7 @@
 {
   "StepKey": "Proof_Core_Showcase",
   "StepName": "【论证】新方言全量橱窗（对齐 Demo_Core_Showcase 结构）",
-  "Description": "docs/133 L0+L1：Calculate 裸标识符；Assert 优先 Check（L1），保留一组 L0；Retry/Parallel/Group/WaitUntil/Delay/Finalizers/${插值}。",
+  "Description": "docs/133 L0+L1：Calculate 裸标识符；Assert 优先 Check（L1），保留一组 L0；Retry/Parallel/Group/WaitUntil/Delay/Finalizers/${插值}；Log.Info/System.Delay/Inputs@",
   "Command": "DynamicFlow",
   "EvaluateResult": false,
   "TimeoutMs": 60000,
@@ -27,6 +27,11 @@
       "Sequence": [
         {
           "Type": "Action",
+          "Description": "橱窗启动（Log.Info 用 Description）",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Action",
           "Description": "注入模拟测量值",
           "ActionKey": "SetVariable",
           "Args": { "Key": "MeasuredOhm", "Value": 2.5 }
@@ -39,6 +44,13 @@
             "Expression": "LimitOhm - MeasuredOhm",
             "OutputKey": "Margin"
           }
+        },
+        {
+          "Type": "Action",
+          "Description": "Inputs@ 映射到节点作用域再插值",
+          "ActionKey": "Log",
+          "Inputs": { "Note": "@LimitOhm" },
+          "Args": { "Message": "[Inputs] Note=${Note}（来自 @LimitOhm）" }
         },
         {
           "Type": "Action",
@@ -122,8 +134,26 @@
         },
         {
           "Type": "Delay",
-          "Description": "短延时",
+          "Description": "节点 Type=Delay",
           "DelayMs": 30
+        },
+        {
+          "Type": "Action",
+          "Description": "ActionKey=System.Delay（与 Type:Delay / Delay 同源）",
+          "ActionKey": "System.Delay",
+          "Args": { "DelayMs": 20 }
+        },
+        {
+          "Type": "Sequence",
+          "Description": "显式 Sequence 容器",
+          "Children": [
+            {
+              "Type": "Action",
+              "Description": "Sequence 内日志",
+              "ActionKey": "Log",
+              "Args": { "Message": "[Sequence] nested OK" }
+            }
+          ]
         },
         {
           "Type": "Action",

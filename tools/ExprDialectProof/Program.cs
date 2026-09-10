@@ -28,7 +28,7 @@ namespace ZL.Gear.ExprDialectProof
 
             Check("U1_裸标识符算术", () =>
             {
-                var ev = new FilteredWorkflowEvaluator();
+                var ev = new WorkflowEvaluator();
                 var r = ev.EvaluateExpression("LimitOhm - MeasuredOhm", new Dictionary<string, object>
                 {
                     ["LimitOhm"] = 5.0,
@@ -39,7 +39,7 @@ namespace ZL.Gear.ExprDialectProof
 
             Check("U2_字典含WorkflowDefinition大对象仍可算", () =>
             {
-                var ev = new FilteredWorkflowEvaluator();
+                var ev = new WorkflowEvaluator();
                 var vars = new Dictionary<string, object>
                 {
                     ["LimitOhm"] = 5.0,
@@ -47,19 +47,19 @@ namespace ZL.Gear.ExprDialectProof
                     ["WorkflowDefinition"] = new Dictionary<string, object> { ["Sequence"] = new List<object> { "noise" } },
                     ["Sequence"] = new List<object> { 1, 2, 3 }
                 };
-                var promoted = FilteredWorkflowEvaluator.ListPromotableKeys(vars);
+                var promoted = WorkflowEvaluator.ListPromotableKeys(vars);
                 if (promoted.Contains("WorkflowDefinition") || promoted.Contains("Sequence")) return false;
                 return Convert.ToDouble(ev.EvaluateExpression("LimitOhm - MeasuredOhm", vars)) == 2.5;
             });
 
             Check("U3_bool条件Ready", () =>
-                new FilteredWorkflowEvaluator().EvaluateCondition("Ready", new Dictionary<string, object> { ["Ready"] = true }));
+                new WorkflowEvaluator().EvaluateCondition("Ready", new Dictionary<string, object> { ["Ready"] = true }));
 
             Check("U4_缺键EvaluateExpression抛", () =>
             {
                 try
                 {
-                    new FilteredWorkflowEvaluator().EvaluateExpression("MissingVar + 1", new Dictionary<string, object>());
+                    new WorkflowEvaluator().EvaluateExpression("MissingVar + 1", new Dictionary<string, object>());
                     return false;
                 }
                 catch { return true; }
@@ -67,7 +67,7 @@ namespace ZL.Gear.ExprDialectProof
 
             Check("U5_非法标识符键不提升_SYS", () =>
             {
-                var promoted = FilteredWorkflowEvaluator.ListPromotableKeys(new Dictionary<string, object>
+                var promoted = WorkflowEvaluator.ListPromotableKeys(new Dictionary<string, object>
                 {
                     ["$SYS:SIG:START:x"] = new object(),
                     ["OkVar"] = 1.0
@@ -77,7 +77,7 @@ namespace ZL.Gear.ExprDialectProof
 
             Check("U6_int提升参与运算", () =>
             {
-                var r = new FilteredWorkflowEvaluator().EvaluateExpression("LimitOhm - MeasuredOhm", new Dictionary<string, object>
+                var r = new WorkflowEvaluator().EvaluateExpression("LimitOhm - MeasuredOhm", new Dictionary<string, object>
                 {
                     ["LimitOhm"] = 5,
                     ["MeasuredOhm"] = 2
@@ -86,7 +86,7 @@ namespace ZL.Gear.ExprDialectProof
             });
 
             Check("U7_缺键EvaluateCondition为false", () =>
-                !new FilteredWorkflowEvaluator().EvaluateCondition("MissingFlag", new Dictionary<string, object>()));
+                !new WorkflowEvaluator().EvaluateCondition("MissingFlag", new Dictionary<string, object>()));
 
             await CheckAsync("F1_结构化Assert失败不误PASS", async () =>
             {
@@ -396,6 +396,26 @@ namespace ZL.Gear.ExprDialectProof
                 return r.Success;
             });
 
+            await CheckAsync("F16_空Assert不得误PASS", async () =>
+            {
+                var empty = await RunAsync(MiniFlow(
+                    new Dictionary<string, object>
+                    {
+                        ["Type"] = "Action",
+                        ["ActionKey"] = "Assert",
+                        ["Args"] = new Dictionary<string, object>()
+                    })).ConfigureAwait(false);
+                var msgOnly = await RunAsync(MiniFlow(
+                    new Dictionary<string, object>
+                    {
+                        ["Type"] = "Action",
+                        ["ActionKey"] = "Assert",
+                        ["Args"] = new Dictionary<string, object> { ["Message"] = "只有消息" }
+                    })).ConfigureAwait(false);
+                return !empty.Success && (empty.Message ?? "").Contains("缺少判定")
+                       && !msgOnly.Success && (msgOnly.Message ?? "").Contains("缺少判定");
+            });
+
             Console.WriteLine(_fail == 0 ? "PROOF_ALL_PASS" : "PROOF_HAS_FAILURES=" + _fail);
             return _fail == 0 ? 0 : 1;
         }
@@ -479,11 +499,10 @@ namespace ZL.Gear.ExprDialectProof
         {
             var registry = new WorkflowActionService(_ => { });
             new StandardActionsProvider().RegisterActions(registry);
-            StructuredAssertRegistration.RegisterOverwrite(registry);
 
             var services = new ServiceCollection();
             services.AddSingleton<IActionResolver>(registry);
-            services.AddSingleton<IWorkflowEvaluator>(new FilteredWorkflowEvaluator());
+            services.AddSingleton<IWorkflowEvaluator>(new WorkflowEvaluator());
             var sp = services.BuildServiceProvider();
 
             var ctx = new StepContext(
