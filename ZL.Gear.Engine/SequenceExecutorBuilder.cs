@@ -556,6 +556,12 @@ namespace ZL.Gear.Engine
             return input;
         }
 
+        public object EvaluateExpression(string expression, IDictionary<string, object> variables)
+        {
+            // 委托真评估器，避免 Simple 桩导致 Calculate 静默失效
+            return new WorkflowEvaluator().EvaluateExpression(expression, variables);
+        }
+
         public string Interpolate(string template, IDictionary<string, object> variables)
         {
             if (string.IsNullOrEmpty(template)) return template;

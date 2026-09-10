@@ -25,7 +25,8 @@ namespace ZL.Gear.Core.Workflow
 
             try
             {
-                var parameters = new[] { new Parameter("Vars", variables.GetType(), variables) };
+                // Vars 字典取值为 object：比较/算术请在表达式内 Convert.ToDouble / Convert.ToBoolean；键名用双引号。
+                var parameters = new[] { new Parameter("Vars", typeof(IDictionary<string, object>), NormalizeVars(variables)) };
                 var result = _interpreter.Eval(expression, parameters);
                 return result is bool b && b;
             }
@@ -44,7 +45,7 @@ namespace ZL.Gear.Core.Workflow
                 var expression = str.Substring(1);
                 try
                 {
-                    var parameters = new[] { new Parameter("Vars", variables.GetType(), variables) };
+                    var parameters = new[] { new Parameter("Vars", typeof(IDictionary<string, object>), NormalizeVars(variables)) };
                     return _interpreter.Eval(expression, parameters);
                 }
                 catch (Exception ex)
@@ -54,6 +55,46 @@ namespace ZL.Gear.Core.Workflow
                 }
             }
             return input;
+        }
+
+        /// <summary>
+        /// 求值表达式；失败抛出（供 Calculate 等必须拿到真值的路径，避免静默把公式字符串当结果）。
+        /// </summary>
+        public object EvaluateExpression(string expression, IDictionary<string, object> variables)
+        {
+            if (string.IsNullOrWhiteSpace(expression))
+            {
+                throw new ArgumentException("表达式为空。", nameof(expression));
+            }
+
+            var expr = expression.StartsWith("@", StringComparison.Ordinal) ? expression.Substring(1) : expression;
+            var parameters = new[] { new Parameter("Vars", typeof(IDictionary<string, object>), NormalizeVars(variables)) };
+            return _interpreter.Eval(expr, parameters);
+        }
+
+        /// <summary>
+        /// 将 Vars 规范为 IDictionary，并展开 JValue，保证 DynamicExpresso 算术/比较可用。
+        /// </summary>
+        private static IDictionary<string, object> NormalizeVars(IDictionary<string, object> variables)
+        {
+            var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (variables == null)
+            {
+                return dict;
+            }
+
+            foreach (var kvp in variables)
+            {
+                var v = kvp.Value;
+                if (v is Newtonsoft.Json.Linq.JValue jv)
+                {
+                    v = jv.Value;
+                }
+
+                dict[kvp.Key] = v;
+            }
+
+            return dict;
         }
 
         public string Interpolate(string text, IDictionary<string, object> variables)

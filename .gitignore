@@ -85,3 +85,5 @@ docs/SeatDemo/src/SeatDemo.ConsoleApp/snapshots/
 Data/
 Reports/
 ZL.Gear.ConsoleApp/Scenarios/Generated/
+
+.tmp/

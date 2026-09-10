@@ -91,7 +91,8 @@ namespace ZL.Gear.Engine
                 var val = ctx.Get<object>("Value");
                 if (!string.IsNullOrEmpty(key))
                 {
-                    ctx.Variables.Set(key, val);
+                    // DynamicFlow 节点在子作用域执行；必须写到父级流程变量，后继节点才能读到
+                    ctx.Variables.SetShared(key, val);
                     return ExecutionResult.Succeeded($"已将变量 '{key}' 设置为 '{val}'");
                 }
                 return ExecutionResult.Failed("SetVariable 缺少 'Key' 参数");
@@ -106,8 +107,33 @@ namespace ZL.Gear.Engine
 
             registry.RegisterAction("Assert", async (step, ctx) =>
             {
-                var expected = ctx.Get<bool>("Condition", true);
-                if (!expected)
+                // Condition 可能是：bool（Args 已用 @ 表达式求值）、或字符串表达式（行业 JSON 常见写法）
+                // 禁止对无法转 bool 的字符串静默 default(true) —— 会造成误 PASS
+                bool ok = true;
+                if (step.Parameters != null && step.Parameters.TryGetValue("Condition", out var raw) && raw != null)
+                {
+                    if (raw is bool b)
+                    {
+                        ok = b;
+                    }
+                    else if (raw is string expr)
+                    {
+                        ok = ctx.Evaluate(expr);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            ok = Convert.ToBoolean(raw);
+                        }
+                        catch
+                        {
+                            ok = ctx.Evaluate(Convert.ToString(raw));
+                        }
+                    }
+                }
+
+                if (!ok)
                 {
                     var msg = ctx.Get<string>("Message") ?? "断言失败";
                     return ExecutionResult.Failed(msg);
@@ -124,9 +150,9 @@ namespace ZL.Gear.Engine
 
                 try
                 {
-                    // 使用动态值评估引擎评估表达式内容 (例如 @{1 + 2})
-                    var result = ctx.EvaluateValue(expression);
-                    ctx.Variables.Set(outputKey, result);
+                    // 必须走 EvaluateExpression：EvaluateValue 失败会静默退回公式字符串，导致后续 Assert 误判
+                    var result = ctx.Evaluator.EvaluateExpression(expression, ctx.Variables.AsDictionary());
+                    ctx.Variables.SetShared(outputKey, result);
                     return ExecutionResult.Succeeded($"计算完成: {expression} = {result}");
                 }
                 catch (Exception ex)

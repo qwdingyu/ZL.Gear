@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 
 namespace ZL.Gear.Core.Models
 {
@@ -37,7 +38,38 @@ namespace ZL.Gear.Core.Models
         public void Set<T>(string key, T value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            _store[key] = value;
+            _store[key] = Unwrap(value);
+        }
+
+        /// <summary>
+        /// 写入对后续节点可见的流程级变量：有父作用域则写入<strong>直接父级</strong>（通常即 DynamicFlow 的 flowVariables），否则写入当前。
+        /// 供节点内 SetVariable / Calculate 使用（节点在子作用域执行，默认 Set 写入隔离会导致后继 Assert/WaitUntil 读不到）。
+        /// 注意：不写到绝对根，以免穿透流程隔离污染外部 StepContext。
+        /// </summary>
+        public void SetShared<T>(string key, T value)
+        {
+            if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+            if (_parent != null)
+            {
+                _parent.Set(key, value);
+            }
+            else
+            {
+                Set(key, value);
+            }
+        }
+
+        /// <summary>
+        /// 去掉 JSON 反序列化残留的 JValue，避免表达式引擎对 JValue 做算术时报 Invalid Operation。
+        /// </summary>
+        private static object Unwrap(object value)
+        {
+            if (value is JValue jv)
+            {
+                return jv.Value;
+            }
+
+            return value;
         }
 
         /// <summary>
