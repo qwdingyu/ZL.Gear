@@ -6,9 +6,6 @@
     <AssemblyName>ZL.Gear.Engine</AssemblyName>
     <RootNamespace>ZL.Gear.Engine</RootNamespace>
   </PropertyGroup>
-<ItemGroup>
-    <Compile Remove="Runner\CentralizedTestExecutionService.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.2" />

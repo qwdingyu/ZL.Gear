@@ -41,10 +41,10 @@ dotnet test ZL.Gear.sln
 dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj
 
 # 运行单个测试类
-dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~FrameSplitterTests"
+dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests"
 
 # 运行单个测试方法
-dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~FrameSplitterTests.FixedLengthSplitter_正常分帧测试"
+dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
 ```
 
 ---
@@ -242,14 +242,9 @@ ZL.Gear.*/
 
 ```csharp
 [Test]
-public void FixedLengthSplitter_正常分帧测试()
+public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 {
-    var splitter = CreateFixedLengthSplitter(8);
-    byte[] data = Encoding.ASCII.GetBytes("12345678ABCDEFGH");
-    splitter.Append(data, 0, data.Length);
-    
-    var frames = splitter.ExtractFrames();
-    Assert.AreEqual(2, frames.Count);
+    // 见 ZL.Gear.Drivers.Tests/ModuleLoaderRegressionTests.cs
 }
 ```
 
