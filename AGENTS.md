@@ -28,7 +28,8 @@ dotnet build ZL.Gear.Core/ZL.Gear.Core.csproj
 dotnet build ZL.Gear.Drivers/ZL.Gear.Drivers.csproj
 dotnet build ZL.Gear.Engine/ZL.Gear.Engine.csproj
 dotnet build ZL.Gear.Sensing/ZL.Gear.Sensing.csproj
-dotnet build ZL.Gear.Extension.Seat/ZL.Gear.Extension.Seat.csproj
+dotnet build ZL.Gear.Extension.Seat/ZL.Gear.Solutions.Seat.csproj
+dotnet build samples/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj
 ```
 
 ### 2.3 运行测试
@@ -45,6 +46,33 @@ dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQu
 
 # 运行单个测试方法
 dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
+
+# Extensions.Data.Tests（已在 ZL.Gear.sln；check_release 第 7 步 Release 专项仍保留）
+dotnet test ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
+```
+
+### 2.4 发版门禁与场景验证
+
+**真值源：`check_release.sh`（当前 9 步）**——含 sln 编译/测试、ExprDialectProof、FullIntegration/Moat、IndustryKit verify、Extensions.Data.Tests、Sync、Continuous 采样橱窗。
+
+```bash
+bash check_release.sh
+```
+
+**ConsoleApp 单场景（Mock，无硬件）：**
+
+```bash
+export ZL_GEAR_FORCE_MOCK=true
+dotnet build ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj
+dotnet run --project ZL.Gear.ConsoleApp --no-build -- \
+  -s ZL.Gear.ConsoleApp/Scenarios/Demo_Sampling_Continuous.json
+```
+
+**IndustryKit 闭环：**
+
+```bash
+dotnet run --project samples/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
+# 须含 INDUSTRY_KIT_VERIFY_PASS
 ```
 
 ---
@@ -257,27 +285,74 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 1. 在 `ZL.Gear.Drivers/Devices` 下创建设备类
 2. 实现 `IDevice` 或 `IDeviceDriver` 接口
 3. 在 `DeviceFactory` 中注册设备类型
-4. 如有必要，在 `ZL.Gear.Extension.Seat` 中添加对应的 StepHandler
+4. 行业步骤优先用 `IGearExtension` + `StepArgsReader`（见 docs/140），参考 `samples/IndustryKit/`，勿再向 `ZL.Gear.Extension.Seat` 堆业务
 
-### 7.2 添加新测试步骤
+### 7.2 添加新测试步骤 / 行业扩展
 
-1. 在对应 Extension 项目中创建 `*Handler` 类
-2. 实现 `IStepHandler` 接口
-3. 在扩展入口类（如 `SeatExtension`）中注册处理器
-4. 在 JSON 配置文件中添加步骤定义
+1. **推荐**：复制 `samples/IndustryKit/ZL.Gear.Extension.Station`，实现 `IGearExtension`，`RegisterHandlerWithAction`
+2. 配方用 DynamicFlow JSON（docs/134–137 新方言）；宿主 `WithExtension(...).WithBuiltInModules(...)`
+3. 用 `samples/IndustryKit` 客户端 `verify` 做 PASS/故意 FAIL/超时闭环
+4. 早期 `ZL.Gear.Extension.Seat` 仅作私有 PLC 遗产参考，**不要**作为新行业模板拷贝源（见 docs/139）
+
+**PR 自检（产线相关，详见 §8.2 · docs/140 §六 · docs/141 §九–§十）：**
+
+- [ ] 限值/RecipeId：`StepArgSource.ArgsOnly` + `TryRequire*`（禁止 `All` / `context.Get` 读必填限值）
+- [ ] 写流程：`args.SetShared`（禁止 Handler 内 `Variables.Set`）
+- [ ] 读前序：`GetFlowString` / `VariablesOnly`（禁止 `All` 误读 Global）
+- [ ] 可选 Args 覆盖：键存在则 fail-closed，禁止 `TryGet` 失败后静默回退（见 ProbeChannel 修正）
+- [ ] 判据在 JSON `Assert`（规格判定）；Handler 仅做设备/安全硬中断
+- [ ] `Assert` L1 `Check` **单条件**：禁止 `&&` / `||` / 括号；多条件拆成多条 Assert（否则 `AssertCheckParser` 报「含多余字符」→ 步骤 Failed，见 docs/141 G-02 实测）
+- [ ] `ParameterSchema` 与 TryRequire 字段人工对齐（**无**自动绑定，docs/121 已否决）
+- [ ] verify 含故意 FAIL + 超时场景
 
 ### 7.3 修复编译错误
 
 - Core 和 Sensing 项目可能存在编译错误
 - 优先修复 Core 层，再修复依赖层
 - 参考测试项目中的 MockInterfaces.cs 获取接口定义
+- 行业样例构建：`dotnet build samples/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj`
+---
+
+## 8. Agent 验证最佳实践与踩坑实录
+
+> 详述见 [docs/141 §十](./docs/141_ATE_OpenTAP_TestStand对标基准_2026-09-10.md) · Handler 规则 [docs/140 §六](./docs/140_StepArgsReader语法糖总表与作用域踩坑_2026-09-10.md) · 方向禁止 [docs/141 §九](./docs/141_ATE_OpenTAP_TestStand对标基准_2026-09-10.md)
+
+### 8.1 跑 `dotnet` 时（Agent / CI 通用）
+
+| 踩坑 | 正确做法 |
+|------|----------|
+| 沙箱内 `dotnet build` NuGet 失败或极慢 | 需要网络时申请 **full_network**；或让用户本机跑 `check_release.sh` |
+| ~10 分钟 `Build FAILED` 且 **0 Error(s)** | MSBuild 子进程超时；缩小为单 csproj build，必要时清理 MSBuild/dotnet 进程 |
+| `dotnet run ... \| tail -n 5` 显示 exit 0 但 build 失败 | **管道 exit code 来自 tail**；看 dotnet 退出码或日志关键字 `PASS`/`FAILED` |
+| 每次 `dotnet run` 隐式全量编译 | 先 `dotnet build`，再 `--no-build` 跑场景/verify |
+| ConsoleApp 测量场景无硬件失败 | `export ZL_GEAR_FORCE_MOCK=true` |
+
+### 8.2 产线安全（行业 Handler / JSON 配方）
+
+**禁止方向（按错即产线灾难，勿立项）：**
+
+- ParameterSchema **自动运行时绑定**（docs/121 已否决；Schema=文档 + StepArgsReader 手写）
+- 产线限值用 `context.Get` / `StepArgSource.All`
+- 行业 Handler 用 `Variables.Set`（须 `args.SetShared`）
+- verify **只跑 HappyPath**（须含故意 FAIL + 超时）
+- Assert L1 `Check` 写 `&&`（须拆成多条单条件 Assert）
+
+**已验证模板：** `samples/IndustryKit/` · 场景库权威目录 `ZL.Gear.ConsoleApp/Scenarios/`（勿从 `docs/archive/` 复制）。
+
+### 8.3 审查 141 号文档时的方法
+
+1. 结论须 `rg`/读实码可复现；冲突 **实码 > docs/137 > docs/121 §十二**。  
+2. 「已完成」须实测 PASS，不能只看文件存在（例：Continuous 场景初版 `&&` Assert 实为 FAIL）。  
+3. 新 Gap 不得与 docs/130/121 **明确不做** 清单冲突。
 
 ---
 
-## 8. 注意事项
+## 9. 注意事项
 
 - 项目使用 .NET Standard 2.0，需注意 API 兼容性
 - 部分项目引用了 `libs/` 目录下的外部 DLL（**禁止提交**；见 `libs/README.md`）
 - 某些设备驱动需要硬件支持才能完整测试
 - 关注 `NotImplementedException` 和 `TODO` 注释
 - 修改公共 API 时需更新 XML 文档注释
+- 修改 Handler 参数/作用域/采样场景时，同步 [docs/140](./docs/140_StepArgsReader语法糖总表与作用域踩坑_2026-09-10.md) 与 [docs/141](./docs/141_ATE_OpenTAP_TestStand对标基准_2026-09-10.md)
+- Sampling JSON 勿用废弃字段 `Quantity`（须 `SampleCount`/`SampleIntervalMs`）；`ScenarioDemoLibraryTests` 会门禁

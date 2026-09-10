@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.ConsoleApp", "ZL.Ge
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Sensing", "ZL.Gear.Sensing\ZL.Gear.Sensing.csproj", "{00EBF65D-69B2-45D6-E273-DAD2B42A910A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data.Tests", "ZL.Gear.Extensions.Data.Tests\ZL.Gear.Extensions.Data.Tests.csproj", "{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{00EBF65D-69B2-45D6-E273-DAD2B42A910A}.Release|x64.Build.0 = Release|Any CPU
 		{00EBF65D-69B2-45D6-E273-DAD2B42A910A}.Release|x86.ActiveCfg = Release|Any CPU
 		{00EBF65D-69B2-45D6-E273-DAD2B42A910A}.Release|x86.Build.0 = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|x64.Build.0 = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Debug|x86.Build.0 = Debug|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|x64.ActiveCfg = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|x64.Build.0 = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|x86.ActiveCfg = Release|Any CPU
+		{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

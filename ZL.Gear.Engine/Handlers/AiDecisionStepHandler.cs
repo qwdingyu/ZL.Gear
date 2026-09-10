@@ -35,15 +35,17 @@ namespace ZL.Gear.Engine.Handlers
                 context.Log($"[AI] 决策结果: {decision.NextAction}, 理由: {decision.Reason}, 置信度: {decision.Confidence:P0}");
 
                 // 3. 应用决策影响
-                // 将决策结果写入变量，供后续步骤使用
-                context.Variables.Set("AI_LastAction", decision.NextAction);
-                context.Variables.Set("AI_LastReason", decision.Reason);
+                // 将决策结果写入变量，供后续步骤使用。
+                // 必须用 SetShared 写到**流程级**作用域：DynamicFlow 的节点在 CreateChildScope() 子作用域中执行，
+                // 默认 Set 只写节点级隔离作用域，后继 Assert/WaitUntil/Calculate 会读不到（docs/141 G-07 · docs/136）。
+                context.Variables.SetShared("AI_LastAction", decision.NextAction);
+                context.Variables.SetShared("AI_LastReason", decision.Reason);
                 
                 if (decision.NewParameters != null)
                 {
                     foreach (var kv in decision.NewParameters)
                     {
-                        context.Variables.Set(kv.Key, kv.Value);
+                        context.Variables.SetShared(kv.Key, kv.Value);
                         context.Log($"[AI] 更新变量: {kv.Key} = {kv.Value}");
                     }
                 }

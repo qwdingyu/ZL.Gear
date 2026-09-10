@@ -155,6 +155,11 @@ namespace ZL.Gear.Engine.Runner
             CancellationToken token,
             IProgress<StepRunResult> progress = null)
         {
+            // 执行型操作前的功能检查
+            // 若 Build 时已检查，此处 LicenseManager 已缓存状态，开销极低
+            // 保留双重检查是为了支持未来可能的运行时重校验（如 Revalidate）
+            LicenseGuard.EnsureOperationAllowed("basic");
+
             _progressReporter = progress;
             if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
 

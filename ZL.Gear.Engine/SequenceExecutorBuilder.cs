@@ -61,6 +61,7 @@ namespace ZL.Gear.Engine
         private List<IDisposable> _resourceHolder = new();
         private IResultEvaluator _resultEvaluator;
         private List<(string command, IStepHandler handler)> _handlerRegistrations = new();
+        private readonly List<object> _extensionSources = new();
         private bool _enableUnknownCommandWarning = true;
         private int _defaultStepTimeoutMs = 30000;
         private BuiltInModules _builtInModules = BuiltInModules.All;
@@ -117,6 +118,35 @@ namespace ZL.Gear.Engine
             if (handler == null) throw new ArgumentNullException(nameof(handler));
 
             _handlerRegistrations.Add((command, handler));
+            return this;
+        }
+
+        /// <summary>
+        /// 加载行业扩展（<see cref="IGearExtension"/>），在 Build 时经 <see cref="StepDispatcher.LoadModules"/> 装入。
+        /// </summary>
+        /// <remarks>
+        /// 对齐 docs/138：行业差异走插件缝，不要把业务写进 Engine。
+        /// 扩展应使用 <see cref="IStepHandlerRegistry.RegisterHandlerWithAction"/>，确保 DynamicFlow 的 ActionKey 可解析。
+        /// </remarks>
+        /// <param name="extension">扩展实例。</param>
+        public SequenceExecutorBuilder WithExtension(IGearExtension extension)
+        {
+            if (extension == null) throw new ArgumentNullException(nameof(extension));
+            _extensionSources.Add(extension);
+            return this;
+        }
+
+        /// <summary>
+        /// 批量加载行业扩展。
+        /// </summary>
+        /// <param name="extensions">扩展实例集合。</param>
+        public SequenceExecutorBuilder WithExtensions(params IGearExtension[] extensions)
+        {
+            if (extensions == null) throw new ArgumentNullException(nameof(extensions));
+            foreach (var extension in extensions)
+            {
+                WithExtension(extension);
+            }
             return this;
         }
 
@@ -222,6 +252,10 @@ namespace ZL.Gear.Engine
             _logger ??= msg => Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {msg}");
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
 
+            // 授权检查：在构建执行器时进行全局校验
+            // 消费方即使自写宿主，只要调用 Build() 就会触发授权检查
+            LicenseGuard.EnsureAuthorized();
+
             // 同一 builder 实例不可重复 Build（配置已被首个执行器消费，二次 Build 属误用）
             if (_built)
             {
@@ -263,22 +297,27 @@ namespace ZL.Gear.Engine
             // 5. 初始化工作流服务并获取服务提供者，用于注册自定义 Handler
             var provider = InitializeWorkflowServices(libraryService);
 
-            // 注册自定义 Handler（避免调用方通过 ServiceLocator 获取 StepDispatcher）
-            if (_handlerRegistrations.Count > 0)
+            // 注册自定义 Handler / 行业扩展（避免调用方通过 ServiceLocator 获取 StepDispatcher）
+            // 顺序：先 WithHandlers，后 WithExtension；同名命令后者默认 allowOverwrite 覆盖前者，产线应避免冲突。
+            var dispatcher = provider.GetService(typeof(StepDispatcher)) as StepDispatcher;
+            if (dispatcher != null)
             {
-                var dispatcher = provider.GetService(typeof(StepDispatcher)) as StepDispatcher;
-                if (dispatcher != null)
+                foreach (var (command, handler) in _handlerRegistrations)
                 {
-                    foreach (var (command, handler) in _handlerRegistrations)
-                    {
-                        dispatcher.RegisterHandlerWithAction(command, handler);
-                        _logger?.Invoke($"[SequenceExecutorBuilder] 已注册自定义 Handler: {command}");
-                    }
+                    dispatcher.RegisterHandlerWithAction(command, handler);
+                    _logger?.Invoke($"[SequenceExecutorBuilder] 已注册自定义 Handler: {command}");
                 }
-                else
+
+                if (_extensionSources.Count > 0)
                 {
-                    _logger?.Invoke("[SequenceExecutorBuilder] 警告: 无法获取 StepDispatcher，自定义 Handler 未注册");
+                    // IGearExtension.Initialize 内应使用 RegisterHandlerWithAction，保证 DynamicFlow ActionKey 可解析
+                    dispatcher.LoadModules(_extensionSources.ToArray());
+                    _logger?.Invoke($"[SequenceExecutorBuilder] 已加载扩展模块数: {_extensionSources.Count}");
                 }
+            }
+            else if (_handlerRegistrations.Count > 0 || _extensionSources.Count > 0)
+            {
+                _logger?.Invoke("[SequenceExecutorBuilder] 警告: 无法获取 StepDispatcher，自定义 Handler/扩展未注册");
             }
 
             // 6. 创建日志器
