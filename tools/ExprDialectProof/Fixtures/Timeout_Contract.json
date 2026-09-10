@@ -1,0 +1,43 @@
+{
+  "StepKey": "Proof_Timeout_Contract",
+  "StepName": "【论证】超时契约（流程超时 Failed + Finally）",
+  "Description": "与 Demo_Timeout_Contract 对齐：故意超时，证明新求值器注入下超时/Finally 行为不变。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 5000,
+  "StopByFail": false,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 800,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 800,
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "超时后仍应清理",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Proof Timeout cleanup" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "启动说明",
+          "ActionKey": "Log",
+          "Args": { "Message": "即将超时" }
+        },
+        {
+          "Type": "Delay",
+          "Description": "故意超过 WorkflowTimeoutMs",
+          "DelayMs": 5000
+        },
+        {
+          "Type": "Action",
+          "Description": "不应到达",
+          "ActionKey": "Log",
+          "Args": { "Message": "不应执行" }
+        }
+      ]
+    }
+  }
+}
