@@ -18,8 +18,9 @@ namespace ZL.Gear.Engine
             services.AddSingleton<IGearProfileService, GearProfileServices>();
             services.AddSingleton<IStepCatalogService, StepCatalogService>();
             
-            // 注意: IDeviceService 必须由宿主程序注册（因为它依赖具体的驱动实现）
-            // services.AddSingleton<IDeviceService, ...>();
+            // 注意: IDeviceService 必须由宿主显式注册（Engine 解耦后不再引用 Drivers）。
+            // 全栈 Demo/产线宿主：services.AddGearDrivers();  // ZL.Gear.Drivers 程序集
+            // 纯逻辑宿主：省略即可，SequenceExecutorBuilder 默认 NullDeviceService。
             
             // Engine Services
             services.AddTransient<SequenceExecutor>();

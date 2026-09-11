@@ -30,11 +30,16 @@ namespace ZL.Gear.Engine
     /// using var executor = SequenceExecutorBuilder.Create()
     ///     .Build();
     ///
-    /// // 标准模式：带设备配置
+    /// // 标准模式：带设备配置（须显式注入 Drivers，Engine 不再默认 new 驱动）
+    /// var (deviceService, deviceResources) = DriversServiceCollectionExtensions.CreateDeviceService();
+    /// using (deviceResources)
     /// using var executor = SequenceExecutorBuilder.Create()
     ///     .WithDeviceConfig("Protocols/devices.json")
+    ///     .WithDeviceService(deviceService)
     ///     .WithLogger(Console.WriteLine)
     ///     .Build();
+    ///
+    /// // 纯逻辑 / 行业扩展（无真实仪器）：可省略 WithDeviceService，默认 NullDeviceService
     ///
     /// // 完整模式：自定义所有服务
     /// using var executor = SequenceExecutorBuilder.Create()

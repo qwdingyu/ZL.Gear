@@ -75,6 +75,17 @@ dotnet run --project samples/IndustryKit/ZL.Gear.Samples.Industry.Client -- veri
 # 须含 INDUSTRY_KIT_VERIFY_PASS
 ```
 
+### 2.5 Engine/Drivers 宿主注入（Phase 1 解耦后 · 必读）
+
+`ZL.Gear.Engine` **不再**编译引用 `ZL.Gear.Drivers`。未注入时 `SequenceExecutorBuilder` 使用 `NullDeviceService`（纯逻辑可 Build；设备步骤 Lease 时报错）。
+
+| 宿主类型 | 引用 | 设备服务 |
+|----------|------|----------|
+| 行业模板 / 纯 DynamicFlow | 仅 Engine + Core 扩展 | 默认即可（IndustryKit `BuiltInModules.Core`） |
+| ConsoleApp / WinForms / 产线 | Engine + **Drivers** | `DriversServiceCollectionExtensions.CreateDeviceService()` + `.WithDeviceService(...)` 或 DI `AddGearDrivers()` |
+
+详见 [docs/144 §六](./docs/144_Engine解耦二次深度审查与落地路线图_2026-09-11.md)。
+
 ---
 
 ## 3. 代码风格指南
