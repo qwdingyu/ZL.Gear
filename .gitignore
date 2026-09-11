@@ -84,7 +84,7 @@ docs/SeatDemo/src/SeatDemo.ConsoleApp/snapshots/
 # === 运行时生成数据 ===
 Data/
 Reports/
-ZL.Gear.ConsoleApp/Scenarios/Generated/
+demos/ZL.Gear.ConsoleApp/Scenarios/Generated/
 
 .tmp/
 
@@ -92,4 +92,4 @@ ZL.Gear.ConsoleApp/Scenarios/Generated/
 # 构建 Seat / Bus / Communication 部分能力前，按 libs/README.md 自行放置 DLL
 libs/**
 !libs/README.md
-ZL.Gear.Communication/libs/**
+src/ZL.Gear.Communication/libs/**
