@@ -9,6 +9,9 @@
     <IsPackable>false</IsPackable>
     <Description>ZL.Gear NI-VISA 通信扩展（仅 Windows，需 NI-VISA 运行时）</Description>
     <Authors>ZL.Gear Team</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/owner/ZL.Gear</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/owner/ZL.Gear.git</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

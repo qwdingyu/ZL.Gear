@@ -9,13 +9,17 @@
     <!-- 项目信息 -->
     <AssemblyName>ZL.Gear.Communication</AssemblyName>
     <RootNamespace>ZL.Gear.Communication</RootNamespace>
-    <Description>ZL.Gear 工业通信框架 - 传输层、分帧器、连接守护</Description>
+    <Description>ZL.Gear 工业通信框架 - 传输层、分帧器、连接守护（纯托管，跨平台）</Description>
     <Authors>ZL.Gear Team</Authors>
 
     <!-- 生成的 NuGet 包信息（未来可能发布） -->
     <PackageId>ZL.Gear.Communication</PackageId>
     <Version>1.0.0</Version>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/owner/ZL.Gear</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/owner/ZL.Gear.git</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
