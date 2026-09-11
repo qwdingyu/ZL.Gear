@@ -13,7 +13,7 @@ namespace ZL.Gear.Extension.Station
     /// <item>只注册行业特异命令；通用 Delay/Assert/Calculate/DynamicFlow 由 Engine 内置模块提供。</item>
     /// <item>配方差异优先改 JSON（Variables / Args），换行业时复制本工程并改命令前缀即可。</item>
     /// </list>
-    /// 宿主用法：<c>SequenceExecutorBuilder.Create().WithExtension(new StationExtension()).Build()</c>
+    /// 宿主用法：<c>SequenceExecutorBuilder.Create().AsLogicOnlyDemoHost().WithExtension(new StationExtension()).Build()</c>
     /// </remarks>
     public sealed class StationExtension : IGearExtension
     {

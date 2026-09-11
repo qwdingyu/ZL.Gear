@@ -26,24 +26,26 @@ namespace ZL.Gear.Engine
     ///
     /// 使用方式：
     /// ```csharp
-    /// // 最小模式：一行初始化
+    /// // 纯逻辑 / 行业扩展（无真实仪器）：必须显式声明 LogicOnly 宿主
     /// using var executor = SequenceExecutorBuilder.Create()
+    ///     .AsLogicOnlyDemoHost()
+    ///     .WithBuiltInModules(BuiltInModules.Core)
+    ///     .WithExtension(new StationExtension())
     ///     .Build();
     ///
-    /// // 标准模式：带设备配置（须显式注入 Drivers，Engine 不再默认 new 驱动）
+    /// // 仪器化产线 / ConsoleApp：显式注入 IDeviceService
     /// var (deviceService, deviceResources) = DriversServiceCollectionExtensions.CreateDeviceService();
     /// using (deviceResources)
     /// using var executor = SequenceExecutorBuilder.Create()
+    ///     .AsInstrumentedHost(deviceService)
+    ///     .WithBuiltInModules(BuiltInModules.All)
     ///     .WithDeviceConfig("Protocols/devices.json")
-    ///     .WithDeviceService(deviceService)
     ///     .WithLogger(Console.WriteLine)
     ///     .Build();
     ///
-    /// // 纯逻辑 / 行业扩展（无真实仪器）：可省略 WithDeviceService，默认 NullDeviceService
-    ///
-    /// // 完整模式：自定义所有服务
+    /// // 自定义所有服务（仪器化）
     /// using var executor = SequenceExecutorBuilder.Create()
-    ///     .WithDeviceService(deviceService)
+    ///     .AsInstrumentedHost(deviceService)
     ///     .WithProfileService(profileService)
     ///     .WithCustomServices(services => { ... })
     ///     .Build();
@@ -339,7 +341,9 @@ namespace ZL.Gear.Engine
             }
 
             // 3. 创建或使用自定义的 IDeviceService
-            var deviceService = _customDeviceService ?? (_deviceHostMode == DeviceHostMode.LogicOnly ? new LogicOnlyDeviceService() : CreateDefaultDeviceService());
+            // Build 门禁已保证：Instrumented 必带 _customDeviceService（否则上方已抛异常），
+            // 故走到 ?: 右侧时只可能是 LogicOnly，统一由 fail-closed 的 LogicOnlyDeviceService 兜底。
+            var deviceService = _customDeviceService ?? new LogicOnlyDeviceService();
 
             // 4. 创建或使用自定义的 IGearProfileService
             var profileService = _customProfileService ?? CreateDefaultProfileService(libraryService);
@@ -405,13 +409,6 @@ namespace ZL.Gear.Engine
                 barcode,
                 globalContext ?? new Dictionary<string, object>(),
                 token);
-        }
-
-        private IDeviceService CreateDefaultDeviceService()
-        {
-            _logger?.Invoke(
-                "[SequenceExecutorBuilder] 未注入 IDeviceService，使用 NullDeviceService（纯逻辑场景可用；设备步骤执行时将报错）。");
-            return new NullDeviceService();
         }
 
         private ILibraryService CreateDefaultLibraryService()

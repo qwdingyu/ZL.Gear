@@ -77,12 +77,15 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
 
 ### 2.5 Engine/Drivers 宿主注入（Phase 1 解耦后 · 必读）
 
-`ZL.Gear.Engine` **不再**编译引用 `ZL.Gear.Drivers`。未注入时 `SequenceExecutorBuilder` 使用 `NullDeviceService`（纯逻辑可 Build；设备步骤 Lease 时报错）。
+`ZL.Gear.Engine` **不再**编译引用 `ZL.Gear.Drivers`。`Build()` **强制要求显式声明宿主**——未声明将抛 `InvalidOperationException`，**没有** `NullDeviceService` 兜底（该类已删除）。
 
-| 宿主类型 | 引用 | 设备服务 |
+| 宿主类型 | 引用 | 必须调用 |
 |----------|------|----------|
-| 行业模板 / 纯 DynamicFlow | 仅 Engine + Core 扩展 | 默认即可（IndustryKit `BuiltInModules.Core`） |
-| ConsoleApp / WinForms / 产线 | Engine + **Drivers** | `DriversServiceCollectionExtensions.CreateDeviceService()` + `.WithDeviceService(...)` 或 DI `AddGearDrivers()` |
+| 行业模板 / 纯 DynamicFlow / Demo | 仅 Engine + Core 扩展 | `.AsLogicOnlyDemoHost()`（自动锁 `BuiltInModules.Core`；禁止 `WithDeviceConfig`） |
+| ConsoleApp / WinForms / 产线 | Engine + **Drivers** | `.AsInstrumentedHost(deviceService)` 或 `.WithDeviceService(svc)` |
+
+- 设备服务来源：`DriversServiceCollectionExtensions.CreateDeviceService()`，或 DI `AddGearDrivers()`。
+- 范例：`demos/IndustryKit/ZL.Gear.Samples.Industry.Client/Program.cs`（LogicOnly）、`demos/ZL.Gear.ConsoleApp/Program.cs`（Instrumented）。
 
 详见 [docs/144 §六](./docs/144_Engine解耦二次深度审查与落地路线图_2026-09-11.md)。
 

@@ -176,6 +176,7 @@ namespace ZL.Gear.Samples.Industry.Client
             var steps = ScenarioLoader.Load(scenarioPath);
 
             using var executor = SequenceExecutorBuilder.Create()
+                .AsLogicOnlyDemoHost()
                 .WithLogger(log)
                 // 显式 Core：不默认 All，避免样例被 Sensing/PLC 副作用污染（docs/138 §五）
                 .WithBuiltInModules(BuiltInModules.Core)
