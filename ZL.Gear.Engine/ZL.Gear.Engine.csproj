@@ -15,13 +15,18 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NLog" Version="6.0.7" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.72.0" />
-    <PackageReference Include="ZL.License" Version="2.2.6" />
+    <!-- 授权基础设施：使用**本地最新源码**打出的包（2.2.6-devlocal），而非 nuget.org 的 2.2.6 旧版。
+         二者 DevMode 语义不同：旧包 LicenseManager.DevMode setter 无效（读回恒 false）；
+         新源码禁止 setter 开启 DevMode，必须 Initialize(LicenseConfig{DevMode=true})
+         + 环境变量 ZL_LICENSE_DEV_TOKEN/ZL_LICENSE_DEV_SECRET 令牌校验。
+         打包命令与本地源配置见 ./NuGet.config；
+         设计依据：ZL.PlcBase/docs/147_统一授权顶层设计方案_20260911.md -->
+    <PackageReference Include="ZL.License" Version="2.2.6-devlocal" />
   </ItemGroup>
 
 
   <ItemGroup>
     <ProjectReference Include="..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
     <ProjectReference Include="..\ZL.Gear.Sensing\ZL.Gear.Sensing.csproj" />
-    <ProjectReference Include="..\ZL.Gear.Drivers\ZL.Gear.Drivers.csproj" />
   </ItemGroup>
 </Project>

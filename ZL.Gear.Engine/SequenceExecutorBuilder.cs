@@ -15,8 +15,8 @@ using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
 using ZL.Gear.Core.Workflow;
-using ZL.Gear.Drivers.Core;
 using ZL.Gear.Engine.Evaluation;
+using ZL.Gear.Engine.Infrastructure;
 using ZL.Gear.Engine.Runner;
 
 namespace ZL.Gear.Engine
@@ -359,11 +359,9 @@ namespace ZL.Gear.Engine
 
         private IDeviceService CreateDefaultDeviceService()
         {
-            _logger?.Invoke("[SequenceExecutorBuilder] 创建设备服务...");
-            var factory = new UnifiedDeviceFactory();
-            _resourceHolder.Add(factory);
-            var deviceService = new UnifiedDeviceService(factory);
-            return deviceService;
+            _logger?.Invoke(
+                "[SequenceExecutorBuilder] 未注入 IDeviceService，使用 NullDeviceService（纯逻辑场景可用；设备步骤执行时将报错）。");
+            return new NullDeviceService();
         }
 
         private ILibraryService CreateDefaultLibraryService()

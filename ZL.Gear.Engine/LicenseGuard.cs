@@ -1,42 +1,36 @@
+using System;
 using ZL.License;
 
 namespace ZL.Gear.Engine;
 
 /// <summary>
 /// 授权门禁（进程级单次检查）。
-/// <para>
-/// 由 <see cref="SequenceExecutorBuilder.Build"/> 和 <see cref="SequenceExecutor.ExecuteAsync"/> 调用，
-/// 确保即使消费方自写宿主，只要走 Engine 标准执行路径，授权检查必然触发。
-/// </para>
 /// </summary>
 internal static class LicenseGuard
 {
-    private static volatile bool _authorizationChecked;
-    private static readonly object _initLock = new object();
+    /// <summary>
+    /// 测试模式开关：仅用于单测绕过 LicenseManager 授权检查，避免测试环境受 DevMode/证书/TrialStamp 影响。
+    /// 生产代码不会设置此环境变量，因此不会影响线上授权门禁。
+    /// </summary>
+    private static bool IsTestMode =>
+        string.Equals(Environment.GetEnvironmentVariable("ZL_GEAR_LICENSE_TEST_MODE"), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// 确保进程已通过授权初始化（仅执行一次）。
     /// </summary>
     public static void EnsureAuthorized()
     {
-        if (_authorizationChecked) return;
+        if (IsTestMode) return;
 
-        lock (_initLock)
+        // ZL.License 进程级单例，多次调用不会重复初始化
+        LicenseManager.Initialize();
+
+        if (!LicenseManager.IsAuthorized && !LicenseManager.IsTrial)
         {
-            if (_authorizationChecked) return;
-
-            // ZL.License 进程级单例，多次调用不会重复初始化
-            LicenseManager.Initialize();
-
-            if (!LicenseManager.IsAuthorized && !LicenseManager.IsTrial)
-            {
-                // 未授权且不在 Trial：直接拒绝
-                throw new LicenseException(
-                    "ZL.Gear 未检测到有效授权证书或试用许可。" +
-                    "请配置 ZL_LICENSE_CERT 环境变量或联系供应商获取商业授权。");
-            }
-
-            _authorizationChecked = true;
+            // 未授权且不在 Trial：直接拒绝
+            throw new LicenseException(
+                "ZL.Gear 未检测到有效授权证书或试用许可。" +
+                "请配置 ZL_LICENSE_CERT 环境变量或联系供应商获取商业授权。");
         }
     }
 
@@ -46,6 +40,8 @@ internal static class LicenseGuard
     /// <param name="feature">功能掩码（如 "basic"、"siemens-s7"），连接层传 null。</param>
     public static void EnsureOperationAllowed(string? feature = null)
     {
+        if (IsTestMode) return;
+
         EnsureAuthorized();
 
         if (!LicenseManager.AllowOperation(feature))

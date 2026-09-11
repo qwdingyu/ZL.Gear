@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-Gear.NET 是 .NET 工业自动化微编排框架，采用洋葱架构（Onion Architecture），包含以下核心模块：
+Gear.NET 是 .NET 工业自动化微编排框架，采用洋葱架构（Onion Architecture）。**可发布框架 DL vs Demo/业务** 见 [docs/143](./docs/143_产品定位与可发布DL边界_仓库分拣指南_2026-09-11.md)。核心模块：
 - **ZL.Gear.Core**: 核心契约与抽象层
 - **ZL.Gear.Drivers**: 设备驱动层
 - **ZL.Gear.Engine**: 执行引擎层
@@ -326,6 +326,8 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 | `dotnet run ... \| tail -n 5` 显示 exit 0 但 build 失败 | **管道 exit code 来自 tail**；看 dotnet 退出码或日志关键字 `PASS`/`FAILED` |
 | 每次 `dotnet run` 隐式全量编译 | 先 `dotnet build`，再 `--no-build` 跑场景/verify |
 | ConsoleApp 测量场景无硬件失败 | `export ZL_GEAR_FORCE_MOCK=true` |
+| ConsoleApp/IndustryKit FATAL `feature=basic` | 未设 DevMode | `check_release.sh` / `verify.sh` 已导出 `ZL_LICENSE_DEV_*`（**CI 轨**）；商业发版须另轨 `ZL_LICENSE_CERT`（docs/141 §10.5(4)） |
+| 场景覆盖误判 | 以为只有 ConsoleApp 4 场景跑 PASS | 第 2 步 `ScenarioDemoLibraryTests` **in-process** 已覆盖 Core Showcase / Timeout Contract 等（docs/141 §10.5(3) 双轨） |
 
 ### 8.2 产线安全（行业 Handler / JSON 配方）
 
@@ -338,6 +340,8 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 - Assert L1 `Check` 写 `&&`（须拆成多条单条件 Assert）
 
 **已验证模板：** `samples/IndustryKit/` · 场景库权威目录 `ZL.Gear.ConsoleApp/Scenarios/`（勿从 `docs/archive/` 复制）。
+
+**合规单测（非全仓 bot）：** `IndustryKitHandlerComplianceTests` 扫描模板三 Handler，禁止 `Variables.Set` / `context.Get` / 限值 `All`。
 
 ### 8.3 审查 141 号文档时的方法
 
