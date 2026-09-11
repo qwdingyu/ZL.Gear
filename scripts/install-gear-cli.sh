@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_FILE="$ROOT_DIR/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj"
+PROJECT_FILE="$ROOT_DIR/demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj"
 CONFIGURATION="${CONFIGURATION:-Release}"
 INSTALL_NAME="${INSTALL_NAME:-gear}"
 INSTALL_BASE="${INSTALL_BASE:-$HOME/.local/share/gear-cli}"

@@ -78,8 +78,8 @@ __pycache__/
 *.pyc
 
 # === SeatDemo 演示运行结果 ===
-docs/SeatDemo/data/results/
-docs/SeatDemo/src/SeatDemo.ConsoleApp/snapshots/
+demos/SeatDemo/data/results/
+demos/SeatDemo/src/SeatDemo.ConsoleApp/snapshots/
 
 # === 运行时生成数据 ===
 Data/
@@ -93,3 +93,4 @@ demos/ZL.Gear.ConsoleApp/Scenarios/Generated/
 libs/**
 !libs/README.md
 src/ZL.Gear.Communication/libs/**
+.qwen/tmp/

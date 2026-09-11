@@ -3,25 +3,25 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Core", "ZL.Gear.Core\ZL.Gear.Core.csproj", "{B8FBF666-C1CE-41C8-86BC-E6B030EBFE73}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Core", "src\ZL.Gear.Core\ZL.Gear.Core.csproj", "{B8FBF666-C1CE-41C8-86BC-E6B030EBFE73}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Drivers", "ZL.Gear.Drivers\ZL.Gear.Drivers.csproj", "{7DFB1F73-2BD7-49D0-8120-1E2A227D8640}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Engine", "ZL.Gear.Engine\ZL.Gear.Engine.csproj", "{0A75611A-E276-4956-92FB-760E909A50A8}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Engine", "src\ZL.Gear.Engine\ZL.Gear.Engine.csproj", "{0A75611A-E276-4956-92FB-760E909A50A8}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZL.Gear.Drivers.Tests", "ZL.Gear.Drivers.Tests\ZL.Gear.Drivers.Tests.csproj", "{644277A9-0A7B-4E31-AFCB-8C920DBD7102}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Abstractions", "ZL.Gear.Abstractions\ZL.Gear.Abstractions.csproj", "{227798E7-6851-4714-9C70-2282D2D2F34E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Abstractions", "src\ZL.Gear.Abstractions\ZL.Gear.Abstractions.csproj", "{227798E7-6851-4714-9C70-2282D2D2F34E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Communication", "ZL.Gear.Communication\ZL.Gear.Communication.csproj", "{A5175A5E-6E14-83B6-A42E-A3ED21165673}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Communication", "src\ZL.Gear.Communication\ZL.Gear.Communication.csproj", "{A5175A5E-6E14-83B6-A42E-A3ED21165673}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data", "ZL.Gear.Extensions.Data\ZL.Gear.Extensions.Data.csproj", "{A6FC8A33-DCDC-739D-395B-C39B3775555E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data", "src\ZL.Gear.Extensions.Data\ZL.Gear.Extensions.Data.csproj", "{A6FC8A33-DCDC-739D-395B-C39B3775555E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.ConsoleApp", "ZL.Gear.ConsoleApp\ZL.Gear.ConsoleApp.csproj", "{325B0917-E030-DA88-90C7-486AC0A152D3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.ConsoleApp", "demos\ZL.Gear.ConsoleApp\ZL.Gear.ConsoleApp.csproj", "{325B0917-E030-DA88-90C7-486AC0A152D3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Sensing", "ZL.Gear.Sensing\ZL.Gear.Sensing.csproj", "{00EBF65D-69B2-45D6-E273-DAD2B42A910A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Sensing", "src\ZL.Gear.Sensing\ZL.Gear.Sensing.csproj", "{00EBF65D-69B2-45D6-E273-DAD2B42A910A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data.Tests", "ZL.Gear.Extensions.Data.Tests\ZL.Gear.Extensions.Data.Tests.csproj", "{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data.Tests", "src\ZL.Gear.Extensions.Data.Tests\ZL.Gear.Extensions.Data.Tests.csproj", "{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

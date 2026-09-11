@@ -1,0 +1,66 @@
+{
+  "StepKey": "Station_AssertFail",
+  "StepName": "【IndustryKit】工位故意不合格（防误 PASS）",
+  "Description": "SimulatedOhm > LimitOhm，期望 OverallSuccess=false。验证 Assert 闭环与扩展写变量链路。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 30000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 15000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 15000,
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "失败路径仍应清理",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Station AssertFail cleanup" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "应用超限配方",
+          "ActionKey": "Industry.Station.ApplyRecipe",
+          "Args": {
+            "RecipeId": "STATION-DEMO-NG",
+            "ChannelId": "CH1",
+            "LimitOhm": 5.0,
+            "SimulatedOhm": 9.9
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "通道探测",
+          "ActionKey": "Industry.Station.ProbeChannel"
+        },
+        {
+          "Type": "Action",
+          "Description": "计算裕量（将为负）",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "期望失败的断言",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "Margin > 0",
+            "Message": "电阻裕量不足（故意）"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "不应执行到此处",
+          "ActionKey": "Log",
+          "Args": { "Message": "ERROR: should not reach after assert fail" }
+        }
+      ]
+    }
+  }
+}

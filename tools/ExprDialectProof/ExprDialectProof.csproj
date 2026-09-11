@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <!-- 正式 API：随配置自动解析 Debug/Release，禁止再绑 bin/Debug HintPath -->
-    <ProjectReference Include="..\..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
-    <ProjectReference Include="..\..\ZL.Gear.Engine\ZL.Gear.Engine.csproj" />
+    <ProjectReference Include="..\..\src\ZL.Gear.Core\ZL.Gear.Core.csproj" />
+    <ProjectReference Include="..\..\src\ZL.Gear.Engine\ZL.Gear.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

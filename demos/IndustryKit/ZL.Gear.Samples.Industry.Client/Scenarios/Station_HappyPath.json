@@ -1,0 +1,90 @@
+{
+  "StepKey": "Station_HappyPath",
+  "StepName": "【IndustryKit】工位合格路径（扩展 + 新方言）",
+  "Description": "示范：WithExtension(Station) → ApplyRecipe → ProbeChannel → Calculate → Assert Check → MarkComplete → Finally。无硬件。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 30000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 15000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 15000,
+      "Variables": {
+        "Ready": false
+      },
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "无论成败清理",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Station HappyPath cleanup, StationDone=${StationDone}" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "工位启动",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Action",
+          "Description": "应用配方（行业扩展）",
+          "ActionKey": "Industry.Station.ApplyRecipe",
+          "Args": {
+            "RecipeId": "STATION-DEMO-OK",
+            "ChannelId": "CH1",
+            "LimitOhm": 5.0,
+            "SimulatedOhm": 2.5
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "通道探测（模拟仪表，可替换为真实设备）",
+          "ActionKey": "Industry.Station.ProbeChannel"
+        },
+        {
+          "Type": "Action",
+          "Description": "计算裕量（裸标识符）",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1 Check：裕量为正",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "Margin > 0",
+            "Message": "电阻裕量不足"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1 Check：实测低于上限",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "MeasuredOhm < LimitOhm",
+            "Message": "实测超限"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "工位收尾",
+          "ActionKey": "Industry.Station.MarkComplete"
+        },
+        {
+          "Type": "Action",
+          "Description": "汇总",
+          "ActionKey": "Log",
+          "Args": {
+            "Message": ">>> Station PASS Recipe=${RecipeId} Measured=${MeasuredOhm} Margin=${Margin}"
+          }
+        }
+      ]
+    }
+  }
+}

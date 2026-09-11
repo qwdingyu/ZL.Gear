@@ -24,12 +24,12 @@ dotnet build ZL.Gear.sln -c Release
 ### 2.2 单项目构建
 
 ```bash
-dotnet build ZL.Gear.Core/ZL.Gear.Core.csproj
+dotnet build src/ZL.Gear.Core/ZL.Gear.Core.csproj
 dotnet build ZL.Gear.Drivers/ZL.Gear.Drivers.csproj
-dotnet build ZL.Gear.Engine/ZL.Gear.Engine.csproj
-dotnet build ZL.Gear.Sensing/ZL.Gear.Sensing.csproj
+dotnet build src/ZL.Gear.Engine/ZL.Gear.Engine.csproj
+dotnet build src/ZL.Gear.Sensing/ZL.Gear.Sensing.csproj
 dotnet build ZL.Gear.Extension.Seat/ZL.Gear.Solutions.Seat.csproj
-dotnet build samples/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj
+dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj
 ```
 
 ### 2.3 运行测试
@@ -48,7 +48,7 @@ dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQu
 dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
 
 # Extensions.Data.Tests（已在 ZL.Gear.sln；check_release 第 7 步 Release 专项仍保留）
-dotnet test ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
+dotnet test src/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
 ```
 
 ### 2.4 发版门禁与场景验证
@@ -63,15 +63,15 @@ bash check_release.sh
 
 ```bash
 export ZL_GEAR_FORCE_MOCK=true
-dotnet build ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj
+dotnet build demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj
 dotnet run --project ZL.Gear.ConsoleApp --no-build -- \
-  -s ZL.Gear.ConsoleApp/Scenarios/Demo_Sampling_Continuous.json
+  -s demos/ZL.Gear.ConsoleApp/Scenarios/Demo_Sampling_Continuous.json
 ```
 
 **IndustryKit 闭环：**
 
 ```bash
-dotnet run --project samples/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
 # 须含 INDUSTRY_KIT_VERIFY_PASS
 ```
 
@@ -296,11 +296,11 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 1. 在 `ZL.Gear.Drivers/Devices` 下创建设备类
 2. 实现 `IDevice` 或 `IDeviceDriver` 接口
 3. 在 `DeviceFactory` 中注册设备类型
-4. 行业步骤优先用 `IGearExtension` + `StepArgsReader`（见 docs/140），参考 `samples/IndustryKit/`，勿再向 `ZL.Gear.Extension.Seat` 堆业务
+4. 行业步骤优先用 `IGearExtension` + `StepArgsReader`（见 docs/140），参考 `demos/IndustryKit/`，勿再向 `ZL.Gear.Extension.Seat` 堆业务
 
 ### 7.2 添加新测试步骤 / 行业扩展
 
-1. **推荐**：复制 `samples/IndustryKit/ZL.Gear.Extension.Station`，实现 `IGearExtension`，`RegisterHandlerWithAction`
+1. **推荐**：复制 `demos/IndustryKit/ZL.Gear.Extension.Station`，实现 `IGearExtension`，`RegisterHandlerWithAction`
 2. 配方用 DynamicFlow JSON（docs/134–137 新方言）；宿主 `WithExtension(...).WithBuiltInModules(...)`
 3. 用 `samples/IndustryKit` 客户端 `verify` 做 PASS/故意 FAIL/超时闭环
 4. 早期 `ZL.Gear.Extension.Seat` 仅作私有 PLC 遗产参考，**不要**作为新行业模板拷贝源（见 docs/139）
@@ -321,7 +321,7 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 - Core 和 Sensing 项目可能存在编译错误
 - 优先修复 Core 层，再修复依赖层
 - 参考测试项目中的 MockInterfaces.cs 获取接口定义
-- 行业样例构建：`dotnet build samples/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj`
+- 行业样例构建：`dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj`
 ---
 
 ## 8. Agent 验证最佳实践与踩坑实录
@@ -350,7 +350,7 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 - verify **只跑 HappyPath**（须含故意 FAIL + 超时）
 - Assert L1 `Check` 写 `&&`（须拆成多条单条件 Assert）
 
-**已验证模板：** `samples/IndustryKit/` · 场景库权威目录 `ZL.Gear.ConsoleApp/Scenarios/`（勿从 `docs/archive/` 复制）。
+**已验证模板：** `demos/IndustryKit/` · 场景库权威目录 `demos/ZL.Gear.ConsoleApp/Scenarios/`（勿从 `docs/archive/` 复制）。
 
 **合规单测（非全仓 bot）：** `IndustryKitHandlerComplianceTests` 扫描模板三 Handler，禁止 `Variables.Set` / `context.Get` / 限值 `All`。
 

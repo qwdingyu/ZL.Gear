@@ -1,0 +1,67 @@
+{
+  "StepKey": "Fork_Seatbelt_Like",
+  "StepName": "【IndustryKit】行业分叉：安全带脉冲叙事（仍用工位扩展）",
+  "Description": "不新建 DLL：仅改 RecipeId/限值/模拟值，展示「换行业先换配方」。对齐 Seatbelt 电阻裕量叙事。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 30000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 15000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 15000,
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Seatbelt-like fork cleanup" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "安全带工位配方（JSON 分叉）",
+          "ActionKey": "Industry.Station.ApplyRecipe",
+          "Args": {
+            "RecipeId": "SEATBELT-PULSE-DEMO",
+            "ChannelId": "BELT-R",
+            "LimitOhm": 3.0,
+            "SimulatedOhm": 1.2
+          }
+        },
+        {
+          "Type": "Action",
+          "ActionKey": "Industry.Station.ProbeChannel"
+        },
+        {
+          "Type": "Action",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "MeasuredOhm < LimitOhm",
+            "Message": "安全带回路电阻超限"
+          }
+        },
+        {
+          "Type": "Action",
+          "ActionKey": "Industry.Station.MarkComplete"
+        },
+        {
+          "Type": "Action",
+          "ActionKey": "Log",
+          "Args": {
+            "Message": ">>> Seatbelt-like PASS Measured=${MeasuredOhm} Limit=${LimitOhm}"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <RootNamespace>ZL.Gear.Extension.Station</RootNamespace>
+    <AssemblyName>ZL.Gear.Extension.Station</AssemblyName>
+    <Description>行业工位模板扩展：示范 IGearExtension 插件缝（无私有 libs）。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\ZL.Gear.Core\ZL.Gear.Core.csproj" />
+  </ItemGroup>
+</Project>

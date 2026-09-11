@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>9.0</LangVersion>
+
+    <!-- 项目信息 -->
+    <AssemblyName>ZL.Gear.Communication</AssemblyName>
+    <RootNamespace>ZL.Gear.Communication</RootNamespace>
+    <Description>ZL.Gear 工业通信框架 - 传输层、分帧器、连接守护</Description>
+    <Authors>ZL.Gear Team</Authors>
+
+    <!-- 生成的 NuGet 包信息（未来可能发布） -->
+    <PackageId>ZL.Gear.Communication</PackageId>
+    <Version>1.0.0</Version>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 依赖：System.IO.Ports 用于串口支持 -->
+    <PackageReference Include="Salar.BinaryBuffers" Version="3.3.0" />
+    <PackageReference Include="System.IO.Ports" Version="4.5.0" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <!-- 依赖：System.Threading.Channels 用于 ConnectionGuard -->
+    <PackageReference Include="System.Threading.Channels" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Ivi.Visa">
+      <HintPath>..\..\libs\Ivi.Visa.dll</HintPath>
+    </Reference>
+    <Reference Include="LibUsbDotNet.LibUsbDotNet">
+      <HintPath>..\..\libs\LibUsbDotNet.LibUsbDotNet.dll</HintPath>
+    </Reference>
+    <Reference Include="NationalInstruments.Visa">
+      <HintPath>..\..\libs\NationalInstruments.Visa.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
