@@ -10,12 +10,22 @@ namespace ZL.Gear.Core.Models
     /// </summary>
     public static class StepKit
     {
+        /// <summary>
+        /// 统计步骤总数（含所有子步骤）。
+        /// </summary>
+        /// <param name="steps">顶层步骤集合。</param>
+        /// <returns>总步骤数。</returns>
         public static int CountAllSteps(IEnumerable<StepConfig> steps)
         {
             if (steps == null) return 0;
             return steps.Sum(CountStepsRecursive);
         }
 
+        /// <summary>
+        /// 递归统计单个步骤及其子步骤的总数。
+        /// </summary>
+        /// <param name="config">步骤配置。</param>
+        /// <returns>递归步骤数。</returns>
         public static int CountStepsRecursive(StepConfig config)
         {
             if (config == null) return 0;
@@ -27,6 +37,11 @@ namespace ZL.Gear.Core.Models
             return count;
         }
 
+        /// <summary>
+        /// 移除 Command 包含 "Noise" 的步骤（含递归子步骤）。
+        /// </summary>
+        /// <param name="steps">待过滤步骤集合。</param>
+        /// <returns>过滤后的新步骤集合。</returns>
         public static List<StepConfig> RemoveNoiseSteps(IEnumerable<StepConfig> steps)
         {
             if (steps == null) return new List<StepConfig>();
@@ -47,6 +62,11 @@ namespace ZL.Gear.Core.Models
             return result;
         }
 
+        /// <summary>
+        /// 递归展平单个步骤及其所有子步骤为扁平序列。
+        /// </summary>
+        /// <param name="step">起始步骤。</param>
+        /// <returns>扁平化步骤枚举。</returns>
         public static IEnumerable<StepConfig> FlattenSteps(this StepConfig step)
         {
             if (step == null) yield break;
@@ -60,6 +80,11 @@ namespace ZL.Gear.Core.Models
             }
         }
 
+        /// <summary>
+        /// 将步骤集合递归展平为扁平列表。
+        /// </summary>
+        /// <param name="steps">步骤集合。</param>
+        /// <returns>扁平化步骤列表。</returns>
         public static List<StepConfig> FlattenAll(this IEnumerable<StepConfig> steps)
         {
             var result = new List<StepConfig>();

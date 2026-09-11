@@ -141,18 +141,34 @@ namespace ZL.Gear.Engine.Workflow
         }
         #endregion 
         // --- IActionResolver 实现 (解析) ---
+        /// <summary>
+        /// 解析动作委托：按名称从 Action 注册表返回可执行的 ActionDelegate。
+        /// </summary>
+        /// <param name="name">动作名称。</param>
+        /// <returns>动作委托。</returns>
+        /// <exception cref="KeyNotFoundException">动作未注册。</exception>
         public ActionDelegate ResolveAction(string name)
         {
             if (_actions.TryGetValue(name, out var action)) return action;
             throw new KeyNotFoundException($"动作 '{name}' 未注册。请检查插件加载情况。");
         }
 
+        /// <summary>
+        /// 解析测量委托：按名称从 Measurement 注册表返回可执行的 MeasurementActionDelegate。
+        /// </summary>
+        /// <param name="name">测量动作名称。</param>
+        /// <returns>测量动作委托。</returns>
+        /// <exception cref="KeyNotFoundException">测量动作未注册。</exception>
         public MeasurementActionDelegate ResolveMeasurement(string name)
         {
             if (_measurements.TryGetValue(name, out var action)) return action;
             throw new KeyNotFoundException($"测量动作 '{name}' 未注册。");
         }
 
+        /// <summary>
+        /// 获取所有已注册的动作名称（仅 Action，不包含 Measurement）。
+        /// </summary>
+        /// <returns>动作名称枚举。</returns>
         public IEnumerable<string> GetRegisteredActions()
         {
             return _actions.Keys.ToList();

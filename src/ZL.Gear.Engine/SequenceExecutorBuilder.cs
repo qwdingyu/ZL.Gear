@@ -278,7 +278,8 @@ namespace ZL.Gear.Engine
         }
 
         /// <summary>
-        /// 构建 SequenceExecutor 实例
+        /// 构建 SequenceExecutor 实例。
+        /// 完成设备配置加载、工作流服务初始化、扩展注册，返回可执行的序列执行器。
         /// </summary>
         public SequenceExecutor Build()
         {
