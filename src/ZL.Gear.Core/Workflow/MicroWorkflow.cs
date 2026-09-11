@@ -633,6 +633,11 @@ namespace ZL.Gear.Core.Workflow
             return Judge(ms);
         }
 
+        /// <summary>
+        /// 对测量列表做最终裁决：空列表视为成功；任一测量失败则整体失败。
+        /// </summary>
+        /// <param name="measurements">待裁决的测量集合。</param>
+        /// <returns>聚合后的执行结果。</returns>
         public static ExecutionResultBase Judge(List<Measurement> measurements)
         {
             if (measurements == null || measurements.Count == 0) return ExecutionResult.Succeeded();
