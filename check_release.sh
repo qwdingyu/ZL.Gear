@@ -4,26 +4,15 @@
 # 用途: 在发布新版本前，自动验证所有核心逻辑和经典场景。
 #
 # 授权（docs/141 §10.5(4)）：
-#   - 本脚本为 **CI/Dev 回归轨**：导出 ZL_LICENSE_DEV_* 供 ConsoleApp/IndustryKit 的 SequenceExecutor 执行。
+#   - 本脚本为 **CI/Dev 回归轨**：通过 ZL.Gear 产品级 TestMode 绕过 LicenseGuard。
 #   - **不能替代** 商业授权验收（发版给付费客户前须另轨验证 ZL_LICENSE_CERT）。
-#   - 第 2 步单测另由 TestSetup / test.runsettings 注入 DevMode。
+#   - 第 2 步单测另由 TestSetup / test.runsettings 注入 TestMode。
 
 # ── CI/Dev 授权（docs/141 §10.5(4)）──────────────────────────────────────────
-# LicenseGuard.EnsureOperationAllowed 要求 DevMode 已通过令牌校验：
-#   令牌 = SHA256(机器指纹 + 密钥)，且必须**动态计算**——硬编码值必然落入
-#   「DevMode 令牌无效（机器指纹不匹配）」→ State=Invalid → feature=basic 被拒。
-#   见 ZL.License/docs/01_DevMode令牌验证设计文档_2026-09-08.md §4.1。
-#
-# 平台适配（当前覆盖本仓库开发所用的 macOS）：
-#   ⚠️ ZL.License 的 MachineFingerprint.GetMacOsFingerprint 存在解析缺陷——
-#   `line.Split('"')` 取到的是 " = " 片段而非 IOPlatformUUID，故 macOS 指纹实为
-#   SHA256(" = ") 的前 32 位十六进制（这也意味着所有 macOS 机器指纹相同）。
-#   此处按同一算法复现以保证与运行时一致；若上游修复该缺陷，本段需同步更新
-#   （届时指纹变化，此处会因令牌不匹配而**显式报错**，不会静默放行）。
-export ZL_LICENSE_DEV_SECRET="${ZL_LICENSE_DEV_SECRET:-ZL-GEAR-DEV-SECRET}"
-export ZL_LICENSE_DEV_MODE="true"
-_ZL_FP=$(printf '%s' " = " | shasum -a 256 | awk '{print toupper(substr($1,1,32))}')
-export ZL_LICENSE_DEV_TOKEN=$(printf '%s' "${_ZL_FP}${ZL_LICENSE_DEV_SECRET}" | shasum -a 256 | awk '{print toupper($1)}')
+# ZL.License 2.2.7 为 Release NuGet 包，Release 构建强制 DevMode=false。
+# 因此 CI/Dev 回归轨统一使用 ZL.Gear 产品级 TestMode 绕过 LicenseGuard。
+# 见 ZL.License/docs/05_使用说明与最佳实践_20260911.md §5.2 / §5.4。
+export ZL_GEAR_LICENSE_TEST_MODE="${ZL_GEAR_LICENSE_TEST_MODE:-true}"
 
 echo "===================================================="
 echo "🚀 ZL.Gear 自动化发布质量门检查启动..."
