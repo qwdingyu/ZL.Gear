@@ -94,3 +94,6 @@ libs/**
 !libs/README.md
 src/ZL.Gear.Communication/libs/**
 .qwen/tmp/
+
+# === NuGet 本地缓存（还原用，禁止提交）===
+.nuget-packages/
