@@ -31,16 +31,5 @@
     <ProjectReference Include="..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Ivi.Visa">
-      <HintPath>..\..\libs\Ivi.Visa.dll</HintPath>
-    </Reference>
-    <Reference Include="LibUsbDotNet.LibUsbDotNet">
-      <HintPath>..\..\libs\LibUsbDotNet.LibUsbDotNet.dll</HintPath>
-    </Reference>
-    <Reference Include="NationalInstruments.Visa">
-      <HintPath>..\..\libs\NationalInstruments.Visa.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 
 </Project>

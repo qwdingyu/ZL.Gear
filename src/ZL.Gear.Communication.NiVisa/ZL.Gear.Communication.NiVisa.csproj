@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net6.0-windows</TargetFrameworks>
+    <AssemblyName>ZL.Gear.Communication.NiVisa</AssemblyName>
+    <RootNamespace>ZL.Gear.Communication.NiVisa</RootNamespace>
+    <PackageId>ZL.Gear.Communication.NiVisa</PackageId>
+    <Version>1.0.0</Version>
+    <IsPackable>false</IsPackable>
+    <Description>ZL.Gear NI-VISA 通信扩展（仅 Windows，需 NI-VISA 运行时）</Description>
+    <Authors>ZL.Gear Team</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZL.Gear.Communication\ZL.Gear.Communication.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0-windows'">
+    <Reference Include="NationalInstruments.Visa">
+      <HintPath>..\..\libs\NationalInstruments.Visa.dll</HintPath>
+    </Reference>
+    <Reference Include="LibUsbDotNet.LibUsbDotNet">
+      <HintPath>..\..\libs\LibUsbDotNet.LibUsbDotNet.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

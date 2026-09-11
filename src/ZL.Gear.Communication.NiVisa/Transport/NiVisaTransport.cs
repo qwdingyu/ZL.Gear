@@ -1,16 +1,32 @@
-﻿using NationalInstruments.Visa;
+#if NET6_0_WINDOWS
+using NationalInstruments.Visa;
+#endif
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ZL.Gear.Communication.NiVisa.Abstractions;
 using ZL.Gear.Communication.Models;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Events;
 
-namespace ZL.Gear.Communication.Transport
+namespace ZL.Gear.Communication.NiVisa.Transport
 {
+    /// <summary>
+    /// NI-VISA 传输实现。
+    /// 仅 Windows 平台可用，需要安装 NI-VISA 运行时。
+    /// </summary>
+#if NET6_0_WINDOWS
     public class NiVisaTransport : ITransport, IUsbTmcTransports
+#else
+    /// <summary>
+    /// NI-VISA 传输实现。
+    /// 当前平台不支持 NI-VISA，仅提供占位实现。
+    /// </summary>
+    public class NiVisaTransport : ITransport, IUsbTmcTransports
+#endif
     {
+#if NET6_0_WINDOWS
         private MessageBasedSession _session;
         private readonly string _visaAddress;
         private readonly string _deviceKey;
@@ -31,7 +47,7 @@ namespace ZL.Gear.Communication.Transport
             }
 
             _deviceKey = deviceKey;
-            
+
             // 尝试同步连接或延迟到 ConnectAsync
         }
 
@@ -64,10 +80,10 @@ namespace ZL.Gear.Communication.Transport
                     SetState(DeviceState.Connecting);
                     var rm = new ResourceManager();
                     _session = (MessageBasedSession)rm.Open(_visaAddress);
-                    
+
                     // 默认超时
                     _session.TimeoutMilliseconds = 2000;
-                    
+
                     SetState(DeviceState.Online, "VISA Connected");
                 }
                 catch (Exception ex)
@@ -80,7 +96,7 @@ namespace ZL.Gear.Communication.Transport
 
         public Task DisconnectAsync(CancellationToken token = default)
         {
-             return Task.Run(() => 
+             return Task.Run(() =>
              {
                  try
                  {
@@ -94,7 +110,7 @@ namespace ZL.Gear.Communication.Transport
                  catch { }
              }, token);
         }
-        
+
         // 兼容旧接口
         public Task DisconnectAsync() => DisconnectAsync(CancellationToken.None);
 
@@ -122,15 +138,15 @@ namespace ZL.Gear.Communication.Transport
             return Task.Run(() =>
             {
                 if (_session == null) throw new InvalidOperationException("Not connected");
-                
+
                 // NI-VISA Read implementation
                 // 注意：RawIO.Read 可能会抛出 Timeout 异常
                 // 原生 API 可能是 Read(byte[], long count) 或者 ReadString
                 // 这里为了稳健，假设是基于字符的仪器，使用 ReadString 然后转换
                 // 如果是二进制流，应该使用 _session.RawIO.Read(buffer, offset, count) 如果 API 支持
                 // 根据 NI-VISA .NET 文档，RawIO.Read(byte[] buffer, long count) 存在
-                
-                try 
+
+                try
                 {
                     // 尝试二进制读取
                     // 这里的 API 签名可能需要适配具体的 VISA 库版本
@@ -154,7 +170,7 @@ namespace ZL.Gear.Communication.Transport
                 }
             }, token);
         }
-        
+
         public async Task<byte[]> ReceiveAsync(CancellationToken token = default)
         {
             // 简单读取所有（直到结束符）
@@ -170,7 +186,7 @@ namespace ZL.Gear.Communication.Transport
         {
              if (_session != null) _session.Clear();
         }
-        
+
         public void ClearInputBuffer() => ClearBuffers();
 
         public ValueTask DisposeAsync()
@@ -199,5 +215,75 @@ namespace ZL.Gear.Communication.Transport
                 return System.Text.Encoding.ASCII.GetString(bytes).Trim();
             }, token).GetAwaiter().GetResult();
         }
+#else
+        public DeviceState State => DeviceState.Unknown;
+        public string VisaAddress => string.Empty;
+        public bool IsConnected => false;
+        public Stream DataStream => Stream.Null;
+
+        public bool IsHealthy() => false;
+
+        public Task ConnectAsync(CancellationToken token = default)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public Task DisconnectAsync(CancellationToken token = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DisconnectAsync()
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SendAsync(byte[] data, CancellationToken token)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public Task SendAsync(string msg, CancellationToken token)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public Task<int> ReceiveAsync(byte[] buffer, int offset, int count, CancellationToken token)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public Task<byte[]> ReceiveAsync(CancellationToken token = default)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public void ClearBuffers()
+        {
+        }
+
+        public void ClearInputBuffer()
+        {
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return default;
+        }
+
+        public void Dispose()
+        {
+        }
+
+        public void Write(string msg, CancellationToken token)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+
+        public string Query(string msg, CancellationToken token, int timeoutMs = 5000)
+        {
+            throw new PlatformNotSupportedException("NI-VISA 仅支持 Windows 平台 (net6.0-windows)。");
+        }
+#endif
     }
 }

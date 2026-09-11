@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ZL.Gear.Communication.Models;
 
-namespace ZL.Gear.Communication.Transport
+namespace ZL.Gear.Communication.NiVisa
 {
-    // =========================
-    // 1) USB 选项解析（集中处理）
-    // =========================
+    /// <summary>
+    /// USB 传输选项解析。
+    /// </summary>
     public sealed class UsbTransportOptions
     {
         public int VendorId { get; set; }
