@@ -278,7 +278,6 @@ namespace ZL.Gear.Engine
         /// 检查 Parallel 子节点是否非法：
         /// 1) 显式 Measure；
         /// 2) ActionKey 可解析为测量（含 Read/Query 等「Action+Measurement 双注册」——走 Action 会丢测量数据）。
-        /// 容器子节点（Sequence/Group，无 ActionKey）允许，由其内部自行编排 Measure。
         /// </summary>
         private static bool TryGetIllegalParallelChild(
             IReadOnlyList<WorkflowNode> children,
