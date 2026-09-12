@@ -20,9 +20,12 @@ namespace ZL.Gear.Samples.Industry.Client
             Console.WriteLine();
             Console.WriteLine("【推荐上手顺序（客户开发者）】");
             Console.WriteLine("  1. quickstart     跑 1 个合格场景 + 步骤树（约 10 秒，第一次必跑）");
-            Console.WriteLine("  2. showcase       5 个代表场景，看产品能力全貌");
-            Console.WriteLine("  3. capabilities   能力 ↔ 场景对照表");
-            Console.WriteLine("  4. 打开 Scenarios/Station_HappyPath.json 对照步骤树");
+            Console.WriteLine("  2. learn          6 步深度学习（框架+行业+Assert L2，约 2 分钟）");
+            Console.WriteLine("  3. showcase       5 个代表场景，产品演示橱窗");
+            Console.WriteLine("  4. capabilities   能力矩阵 + 全系统能力地图");
+            Console.WriteLine("  5. 打开 Scenarios/Station_HappyPath.json 对照 --report 步骤树");
+            Console.WriteLine();
+            Console.WriteLine("能力全景：demos/IndustryKit/CAPABILITIES.md");
             Console.WriteLine();
             Console.WriteLine("【维护者 / CI】");
             Console.WriteLine("  verify            7 条门禁（含故意 FAIL + 超时，发版用）");
@@ -58,9 +61,9 @@ namespace ZL.Gear.Samples.Industry.Client
 
             Console.WriteLine();
             Console.WriteLine("建议下一步：");
-            Console.WriteLine("  dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase");
+            Console.WriteLine("  dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- learn");
             Console.WriteLine("  dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- capabilities");
-            Console.WriteLine("  阅读 demos/IndustryKit/GETTING_STARTED.md → 复制 Extension + JSON 到你的项目");
+            Console.WriteLine("  阅读 demos/IndustryKit/CAPABILITIES.md · GETTING_STARTED.md");
         }
     }
 }

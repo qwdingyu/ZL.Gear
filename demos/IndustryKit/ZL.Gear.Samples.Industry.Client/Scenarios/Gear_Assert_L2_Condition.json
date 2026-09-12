@@ -1,0 +1,51 @@
+{
+  "StepKey": "Gear_Assert_L2",
+  "StepName": "【IndustryKit】Assert L2 Condition 方言",
+  "Description": "演示 Assert 第三种形态：Args.Condition（布尔或表达式）。与 L1 Check、L0 Left/Op/Right 互斥。详见 docs/006 §五。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 30000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowDefinition": {
+      "Variables": {
+        "ReadyFlag": false,
+        "Threshold": 3.0,
+        "Sample": 2.5
+      },
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "L2：布尔 Condition 直接通过",
+          "ActionKey": "Assert",
+          "Args": {
+            "Condition": true,
+            "Message": "布尔 Condition 不应失败"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "置位后做表达式 Condition",
+          "ActionKey": "SetVariable",
+          "Args": { "Key": "ReadyFlag", "Value": true }
+        },
+        {
+          "Type": "Action",
+          "Description": "L2：表达式 Condition（Sample < Threshold 且 ReadyFlag）",
+          "ActionKey": "Assert",
+          "Args": {
+            "Condition": "ReadyFlag && Sample < Threshold",
+            "Message": "L2 表达式 Condition 失败"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "完成",
+          "ActionKey": "Log",
+          "Args": { "Message": ">>> Assert L2 Condition PASS" }
+        }
+      ]
+    }
+  }
+}

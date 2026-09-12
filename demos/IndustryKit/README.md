@@ -26,20 +26,17 @@ Station_HappyPath.json
 
 ---
 
-## 5 分钟上手（三条命令）
+## 5 分钟上手
 
 在仓库根目录：
 
 ```bash
-# ① 第一次必跑（1 场景 + 步骤树 + 下一步提示）
 dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- quickstart
-
-# ② 看 5 个代表场景（产品能力全貌）
-dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase
-
-# ③ 能力 ↔ 场景对照（不知道抄哪个 JSON 时）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- learn
 dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- capabilities
 ```
+
+**全系统能力地图**：[`CAPABILITIES.md`](CAPABILITIES.md)（LogicOnly 已演示 vs Instrumented/私有轨）。
 
 无参数 `dotnet run ...` 只打印欢迎说明，**不会**跑 7 条 CI 门禁。
 
@@ -56,8 +53,9 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Releas
 | 路径 | 你是谁 | 先看什么 |
 |------|--------|----------|
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | 客户开发者 | **全文** |
+| [`CAPABILITIES.md`](CAPABILITIES.md) | 所有人 | 能力全景图 |
 | `Scenarios/Station_HappyPath.json` | 写配方的人 | 最短合格路径 JSON |
-| `Scenarios/README.md` | 写配方的人 | 7 个场景逐文件说明 |
+| `Scenarios/README.md` | 写配方的人 | 8 个场景逐文件说明 |
 | `ZL.Gear.Extension.Station/Handlers/` | 写行业代码的人 | 三个 Handler 样板 |
 | `Program.cs` | 集成宿主的人 | `SequenceExecutorBuilder` 组装 |
 | `VerificationCatalog.cs` | 维护者 / CI | 发版门禁 7 条（含故意 FAIL） |
@@ -72,8 +70,10 @@ demos/IndustryKit/
     ├── Program.cs              ← 宿主样板
     ├── OnboardingGuide.cs      ← quickstart 引导文案
     ├── ShowcaseCatalog.cs      ← showcase 顺序
-    ├── CapabilityCatalog.cs    ← 能力矩阵
-    └── Scenarios/              ← JSON 配方库
+    ├── CapabilityCatalog.cs    ← 能力矩阵（已演示）
+    ├── SystemCapabilityMap.cs  ← Instrumented/私有能力清单
+    ├── LearningCatalog.cs      ← learn 命令 6 步路径
+    └── Scenarios/              ← JSON 配方库（8 个）
 ```
 
 ---

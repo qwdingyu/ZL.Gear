@@ -41,22 +41,48 @@ OverallSuccess = true/false
 
 ---
 
-## 3. 三条命令（按顺序跑）
+## 3. 命令速查（客户开发者 vs 维护者）
 
 在仓库根目录执行（`dotnet run` 与参数之间必须有 `--`）：
 
 ```bash
-# ① 第一次必跑：1 个场景 + 步骤树 + 下一步提示（约 10 秒）
+# ① 第一次必跑（约 10 秒）
 dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- quickstart
 
-# ② 看产品能力橱窗（5 个代表场景，全部 PASS）
+# ② 深度学习：6 步 PASS，建立完整心智模型（约 2 分钟）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- learn
+
+# ③ 产品演示橱窗（5 条代表场景）
 dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase
 
-# ③ 看「能力 ↔ 场景」对照表（不知道 JSON 该抄哪个时打开）
+# ④ 能力矩阵 +「框架还有啥」地图
 dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- capabilities
+
+# ⑤ 单场景调试（建议加 --report）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- --report run Gear_Assert_L2_Condition
+
+# ⑥ 列出全部 JSON
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- list
 ```
 
-无参数直接 `dotnet run ...` 只会打印**欢迎说明**，不会跑测试（避免误触 7 条门禁）。
+| 命令 | 给谁 | 说明 |
+|------|------|------|
+| `welcome` / 无参 | 所有人 | 只打印说明，**不跑场景** |
+| `quickstart` | 客户 | 1 条合格路径 + 步骤树 |
+| `learn` | 客户 | 6 步学习路径（见 [`CAPABILITIES.md`](CAPABILITIES.md)） |
+| `showcase` | 产品演示 | 5 条 PASS |
+| `verify` | **CI/维护者** | 7 条门禁（含 2 条故意 FAIL） |
+| `bootstrap-demo` | 迁移工程师 | 座椅 legacy Bootstrap 顺序说明 |
+
+无参数 `dotnet run ...` 等价于 `welcome`，避免误触 verify。
+
+**座椅产线迁移（legacy StepConfig 树）**：IndustryKit 默认演示 DynamicFlow；盐城座椅真实路径需额外 Bootstrap，见：
+
+```bash
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- bootstrap-demo
+```
+
+参考代码：`ZL.Gear.Samples.Industry.Client/Bootstrap/`（`SeatProductionHostBootstrap` · `ISbrLocationProvider` · `IStationInteractionPort`）。详述见 `ZL.Gear.Docs/175` §十四。
 
 ---
 
@@ -65,6 +91,7 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Releas
 | 你的目标 | 先打开 | 说明 |
 |----------|--------|------|
 | 理解**框架**能做什么（并行/重试/等待/断言） | `Scenarios/Gear_Core_Showcase.json` | **无**行业 Handler |
+| Assert **L2 Condition** 方言 | `Scenarios/Gear_Assert_L2_Condition.json` | 与 L1 Check / L0 互斥（docs/006） |
 | 理解**行业扩展**怎么接 | `Scenarios/Station_HappyPath.json` | 最短合格路径，注释在 `Description` 字段 |
 | 只改配方、不改代码 | `Scenarios/Fork_Seatbelt_Like.json` | 复制后改 `RecipeId` / 限值 |
 | 接真实仪表 | 对照 `ProbeChannelHandler.cs` | 保持 `MeasuredOhm` 变量名不变 |
@@ -139,4 +166,5 @@ dotnet add package ZL.Gear.Engine
 
 - 改配方：复制 `Fork_Seatbelt_Like.json` → `dotnet run ... -- run YourScenario`  
 - 加行业动作：复制 Extension 工程 → 实现新 `ActionKey` → JSON 引用  
-- 深入规范：[`docs/004`](../../docs/004_行业扩展模板与使用场景_2026-09-12.md) · [`docs/005`](../../docs/005_StepArgsReader使用规范_2026-09-12.md)
+- 能力全景：[`CAPABILITIES.md`](CAPABILITIES.md)（IndustryKit 已演示 vs Instrumented 能力）
+- 深入规范：[`docs/004`](../../docs/004_行业扩展模板与使用场景_2026-09-12.md) · [`docs/005`](../../docs/005_StepArgsReader使用规范_2026-09-12.md) · [`docs/006`](../../docs/006_表达式变量与判定方言_2026-09-12.md) · [`docs/007`](../../docs/007_验收门禁与测试指南_2026-09-12.md)

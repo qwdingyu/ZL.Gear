@@ -31,9 +31,26 @@ namespace ZL.Gear.Extension.Station.Handlers
             }
 
             args.SetShared("StationDone", true);
-            context.Log($"[Industry.Station] MarkComplete RecipeId={recipeId} → StationDone=true");
+
+            // 演示 GlobalContext：产线条码/型号由宿主 ExecuteAsync 注入，Handler 用 GlobalOnly 读取（见 docs/005）
+            var model = GetGlobalString(context, "Model");
+            var barcode = GetGlobalString(context, "Barcode");
+            context.Log(
+                $"[Industry.Station] MarkComplete RecipeId={recipeId} Model={model} Barcode={barcode} → StationDone=true");
             return Task.FromResult<ExecutionResultBase>(
                 ExecutionResult.Succeeded("工位完成"));
+        }
+
+        private static string GetGlobalString(StepContext context, string key)
+        {
+            if (context.GlobalContext != null
+                && context.GlobalContext.TryGetValue(key, out var value)
+                && value != null)
+            {
+                return value.ToString();
+            }
+
+            return "(none)";
         }
     }
 }

@@ -27,10 +27,15 @@ namespace ZL.Gear.Samples.Industry.Client
         public static IReadOnlyList<CapabilityEntry> All { get; } = new[]
         {
             new CapabilityEntry(
-                "微流程 DSL：Calculate + Assert L1/L0",
+                "微流程 DSL：Calculate + Assert L1/L0/L2",
                 "L-DSL / Engine",
-                "Gear_Core_Showcase.json",
-                "裸标识符表达式、Check 与 Left/Op/Right 双轨"),
+                "Gear_Core_Showcase.json + Gear_Assert_L2_Condition.json",
+                "Check / Left+Op+Right / Condition 三轨（docs/006）"),
+            new CapabilityEntry(
+                "GlobalContext（Model/Barcode）",
+                "L-Test / Engine",
+                "Station_HappyPath.json",
+                "ExecuteAsync 注入；MarkComplete 日志回显"),
             new CapabilityEntry(
                 "控制流：Parallel / Group / Sequence / Retry / Delay",
                 "L-DSL / Engine",

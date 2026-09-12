@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\ZL.Gear.Engine\ZL.Gear.Engine.csproj" />
+    <ProjectReference Include="..\..\..\src\ZL.Gear.Sensing\ZL.Gear.Sensing.csproj" />
     <ProjectReference Include="..\ZL.Gear.Extension.Station\ZL.Gear.Extension.Station.csproj" />
   </ItemGroup>
 
