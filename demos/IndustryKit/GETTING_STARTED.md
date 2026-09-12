@@ -72,17 +72,13 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Releas
 | `learn` | 客户 | 6 步学习路径（见 [`CAPABILITIES.md`](CAPABILITIES.md)） |
 | `showcase` | 产品演示 | 5 条 PASS |
 | `verify` | **CI/维护者** | 7 条门禁（含 2 条故意 FAIL） |
-| `bootstrap-demo` | 迁移工程师 | 座椅 legacy Bootstrap 顺序说明 |
+| `bootstrap-demo` | 文档链接 | 指向 **ZL.Gear.Demos** `SeatHostBootstrap`（IndustryKit 已无 Seat 代码 · G3-01 ✅） |
 
 无参数 `dotnet run ...` 等价于 `welcome`，避免误触 verify。
 
-**座椅产线迁移（legacy StepConfig 树）**：IndustryKit 默认演示 DynamicFlow；盐城座椅真实路径需额外 Bootstrap，见：
+**座椅产线迁移（legacy StepConfig 树）**：公开 IndustryKit **仅**演示 `StationExtension` + LogicOnly verify（178）。盐城座椅 Bootstrap（Noise 注册、`sbrLocDict`、Verify 策略）属 **Demos/Exts**，见 `ZL.Gear.Docs/174` §五 · `175` §十五/§十八 · `177` Batch 5。
 
-```bash
-dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- bootstrap-demo
-```
-
-参考代码：`ZL.Gear.Samples.Industry.Client/Bootstrap/`（`SeatProductionHostBootstrap` · `ISbrLocationProvider` · `IStationInteractionPort`）。详述见 `ZL.Gear.Docs/175` §十四。
+> IndustryKit **不含** Seat/SBR Bootstrap 源码；盐城产线入口见 `ZL.Gear.Demos/.../Seat/SeatHostBootstrap.cs`（180 G3）。
 
 ---
 

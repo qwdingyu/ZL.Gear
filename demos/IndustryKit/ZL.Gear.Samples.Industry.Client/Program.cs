@@ -11,8 +11,6 @@ using ZL.Gear.Core.StepHandler;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine;
 using ZL.Gear.Extension.Station;
-using ZL.Gear.Samples.Industry.Client.Bootstrap;
-
 namespace ZL.Gear.Samples.Industry.Client
 {
     /// <summary>
@@ -64,7 +62,7 @@ namespace ZL.Gear.Samples.Industry.Client
                     "showcase" or "demo" => await ShowcaseAsync(scenariosDir, verbose || report),
                     "run" => await RunOneAsync(scenariosDir, commandArgs.Skip(1).FirstOrDefault(), verbose, report),
                     "verify" => await VerifyAllAsync(scenariosDir, verbose),
-                    "bootstrap-demo" or "seat-bootstrap" => PrintSeatBootstrapDemo(),
+                    "bootstrap-demo" => PrintSeatBootstrapDoc(),
                     "help" or "-h" or "--help" => PrintHelp(),
                     _ => await UnknownAsync(command)
                 };
@@ -99,7 +97,7 @@ namespace ZL.Gear.Samples.Industry.Client
             Console.WriteLine("  run <场景名|路径>   单场景执行（建议加 --report 看步骤树）");
             Console.WriteLine("  list                列出 Scenarios/*.json");
             Console.WriteLine("  verify              CI 门禁（7 条，含故意 FAIL · 非日常演示）");
-            Console.WriteLine("  bootstrap-demo      座椅产线 Bootstrap 启动顺序说明（无硬件）");
+            Console.WriteLine("  bootstrap-demo      座椅 Bootstrap 文档入口（完整验证见私有 ConsoleApp seat-*）");
             Console.WriteLine("  welcome             本说明（无参数默认）");
             Console.WriteLine("  help                本帮助");
             Console.WriteLine();
@@ -130,33 +128,17 @@ namespace ZL.Gear.Samples.Industry.Client
             return result.OverallSuccess ? 0 : 1;
         }
 
-        /// <summary>展示 legacy 座椅产线 Bootstrap 顺序（175 §十四），不加载 Extension.Seat。</summary>
-        private static int PrintSeatBootstrapDemo()
+        /// <summary>公开轨文档入口；盐城 Bootstrap 实现在私有 ZL.Gear.Demos（G3-01 已迁出 IndustryKit）。</summary>
+        private static int PrintSeatBootstrapDoc()
         {
-            Console.WriteLine("[seat-bootstrap] 盐城座椅产线宿主启动顺序（参考实现 · 无 UI · 无 Seat DLL）");
-            Console.WriteLine("文档: ZL.Gear.Docs/175 §十四 · 代码: Bootstrap/SeatProductionHostBootstrap.cs");
+            Console.WriteLine("[bootstrap-demo] 盐城座椅 legacy StepConfig 树 — 公开 IndustryKit 不含 Seat Bootstrap（178/179）");
+            Console.WriteLine("文档: ZL.Gear.Docs/174 §五 B-1～B-6 · 180 G5");
             Console.WriteLine();
-
-            // 真实调用 CreateDefault：DI + WorkflowGlobal + SampleEvents Noise 通道（内存采样）
-            var bootstrap = SeatProductionHostBootstrap.CreateDefault();
-            var sbr = bootstrap.Services.GetService<ISbrLocationProvider>();
-            var noiseRegistered = ZL.Gear.Sensing.SampleEvents.SessionRequesters.ContainsKey("Noise");
-
-            Console.WriteLine("已执行步骤:");
-            Console.WriteLine("  1. ConfigureServices → WorkflowActionService / StepDispatcher / ISbrLocationProvider");
-            Console.WriteLine("  2. WorkflowGlobal.Initialize(sp)");
-            Console.WriteLine($"  3. RegisterNoiseSession → SampleEvents[\"Noise\"] = {(noiseRegistered ? "已注册" : "未注册")}");
-            Console.WriteLine("  4. （可选）LoadModules(ZL.Gear.Extension.Seat) ← 本 Demo 未装私有 Seat 扩展");
-            if (sbr != null && sbr.TryGetLocation("1", out var loc))
-            {
-                Console.WriteLine($"  5. sbrLocDict[1] = {loc}（ISbrLocationProvider 注入 DeviceServices 的抽象）");
-            }
-
-            Console.WriteLine("  6. ApplyElectricalTestVerifyPolicy → 顶层 Step ExecutionType=Verify");
-            Console.WriteLine("  7. SequenceExecutor.ExecuteAsync(legacy StepConfig 树)");
-            Console.WriteLine();
-            Console.WriteLine("接口: IStationInteractionPort（UiPlcEvents）· ISbrLocationProvider（sbrLocDict）");
-            Console.WriteLine("下一步: 私有仓 ConsoleApp + Extension.Seat 跑完整 265 步电检树");
+            Console.WriteLine("Canonical 宿主（Gear.All 私有轨 · ZL.Gear.Demos）:");
+            Console.WriteLine("  代码: ZL.Gear.Demos/ZL.Gear.ConsoleApp/Seat/SeatHostBootstrap.cs");
+            Console.WriteLine("  dotnet run --project ../../ZL.Gear.Demos/ZL.Gear.ConsoleApp -- seat-load");
+            Console.WriteLine("  dotnet run --project ../../ZL.Gear.Demos/ZL.Gear.ConsoleApp -- seat-bootstrap");
+            Console.WriteLine("  dotnet run --project ../../ZL.Gear.Demos/ZL.Gear.ConsoleApp -- seat-noise-smoke");
             return 0;
         }
 

@@ -52,9 +52,9 @@ namespace ZL.Gear.Samples.Industry.Client
                 "ZL.Gear.Extensions.Data",
                 "可选 NuGet；IndustryKit 未引用"),
             new DeferredCapability(
-                "真实座椅产线 Extension.Seat + Noise 采样",
+                "Instrumented 产线扩展 + Noise 采样",
                 "ZL.Gear.Exts + ZL.Gear.Demos",
-                "私有仓；Bootstrap 目录仅演示 DI 顺序")
+                "私有仓；见 ConsoleApp SeatHostBootstrap（非公开 IndustryKit）")
         };
     }
 }

@@ -26,6 +26,7 @@
 | Assert L1/L0/L2 | Showcase + `Gear_Assert_L2_Condition.json` | `learn` ③ |
 | Args fail-closed | `Station_ProbeOverride.json` | `learn` ④ |
 | Parallel + WaitUntil | `Station_Integrated_Ate.json` | `showcase` ③ |
+| 节点级 Condition 守卫 + 节点级 Finally | `Gear_Core_Showcase.json` | `learn` ② / `showcase` ① |
 | 换行业换 JSON | `Fork_Seatbelt_Like.json` | `showcase` ⑤ |
 | 故意 FAIL 门禁 | AssertFail / TimeoutContract | **`verify` only** |
 | GlobalContext | 每场景注入 Model/Barcode | `MarkComplete` 日志可见 |
@@ -41,7 +42,7 @@ IndustryKit 使用 `AsLogicOnlyDemoHost()` + `BuiltInModules.Core`，**刻意**�
 | Sensing 采样（Continuous/Threshold） | 私有 `ZL.Gear.Demos` · `Demo_Sampling_Continuous.json` |
 | GenericMeasure / 真表 Read | Instrumented 宿主 + Mock `IDevice` |
 | PLC / AI 模块 | `BuiltInModules.Plc` / `.Ai` · 私有 Drivers |
-| 顶层 Verify + ExpectedResults | legacy StepConfig 树 · `bootstrap-demo` 说明 |
+| 顶层 Verify + ExpectedResults | legacy StepConfig 树 · **ZL.Gear.Demos** `SeatHostBootstrap`（`bootstrap-demo` 仅文档链接） |
 | Extensions.Data 落库 | NuGet `ZL.Gear.Extensions.Data` · 单元测试 |
 
 ---
