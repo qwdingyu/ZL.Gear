@@ -8,8 +8,10 @@
 
 ```bash
 dotnet build ZL.Gear.sln
-bash check_release_public.sh
+bash check_release_public.sh   # 含 scripts/public-guard.sh (G0)
 ```
+
+全栈私有回归（ConsoleApp + Drivers）在 sibling 仓 **`ZL.Gear.Demos/check_release.sh`**（Gear.All 工作区）。
 
 ## 范围
 

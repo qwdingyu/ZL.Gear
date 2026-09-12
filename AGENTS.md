@@ -63,10 +63,12 @@ dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.cs
 
 ### 2.4 发版门禁与场景验证
 
-**公开轨真值源：`check_release_public.sh`（4 步）**——`ZL.Gear.sln` 编译、Extensions.Data 测试、IndustryKit verify、ExprDialectProof。全栈 9 步回归在 sibling 私有仓 / `Gear.All` 工作区（不在本仓 push 范围）。
+**公开轨真值源：`check_release_public.sh`（5 步）**——`public-guard.sh` (G0) → build → Data.Tests → IndustryKit → ExprDialectProof。  
+**私有全栈**：`../ZL.Gear.Demos/check_release.sh`（先跑公开轨，再 Full + Drivers + ConsoleApp）。
 
 ```bash
 bash check_release_public.sh
+bash scripts/public-guard.sh   # 仅 G0 静态检查
 ```
 
 **ConsoleApp 单场景（Mock，无硬件）：**

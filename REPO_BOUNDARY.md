@@ -10,6 +10,8 @@
 | `src/ZL.Gear.{Core,Engine,Sensing,Abstractions,Extensions.Data}` | 框架 DL · MIT |
 | `tests/ZL.Gear.Extensions.Data.Tests` | 公开 CI 测试 |
 | `check_release_public.sh` | 公开轨质量门（不含 Drivers/Demos） |
+| `scripts/public-guard.sh` | G0 边界静态门禁 |
+| `.github/workflows/public-ci.yml` | GitHub Actions 公开轨 CI |
 | `demos/IndustryKit/` | MIT 教学模板（仅引 Core/Engine） |
 | `tools/ExprDialectProof` | 表达式方言门禁 |
 | `LICENSE` | MIT（公开轨 G0-8） |

@@ -8,17 +8,26 @@ echo "===================================================="
 echo "ZL.Gear 公开轨质量门"
 echo "===================================================="
 
-echo "[1/4] dotnet build ZL.Gear.sln ..."
+echo "[0/5] public-guard (G0) ..."
+bash scripts/public-guard.sh
+
+echo "[1/5] dotnet build ZL.Gear.sln ..."
 dotnet build ZL.Gear.sln -c Release -v q
 
-echo "[2/4] Extensions.Data 单元测试 ..."
-dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q
+echo "[2/5] Extensions.Data 单元测试 ..."
+dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q --no-build
 
-echo "[3/4] IndustryKit verify ..."
+echo "[3/5] IndustryKit verify (零 bypass) ..."
 bash demos/IndustryKit/verify.sh
 
-echo "[4/4] ExprDialectProof ..."
-dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release --no-build 2>/dev/null || \
-  dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release
+echo "[4/5] ExprDialectProof ..."
+dotnet build tools/ExprDialectProof/ExprDialectProof.csproj -c Release -v q
+PROOF_OUT="$(dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release --no-build 2>&1)"
+echo "$PROOF_OUT" | tail -n 5
+echo "$PROOF_OUT" | grep -q "PROOF_ALL_PASS" || {
+  echo "❌ ExprDialectProof 未输出 PROOF_ALL_PASS"
+  exit 5
+}
 
+echo "[5/5] 完成"
 echo "✅ 公开轨质量门通过"
