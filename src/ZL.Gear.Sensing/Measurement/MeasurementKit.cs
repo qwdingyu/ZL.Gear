@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Devices.Protocol;
-using ZL.Gear.Core.Events;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Sensing.Dto;
 using ZL.Gear.Core.Utils;
