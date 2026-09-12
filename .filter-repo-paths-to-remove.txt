@@ -1,0 +1,26 @@
+# 五仓迁出 / 私有内容 — git filter-repo 剔除清单（方案 A）
+# 用法: git filter-repo --invert-paths --paths-from-file .filter-repo-paths-to-remove.txt
+ZL.Bus
+ZL.Gear.Drivers
+ZL.Gear.Drivers.Tests
+ZL.Gear.Communication
+ZL.Gear.ConsoleApp
+ZL.Gear.Extension.Seat
+ZL.Gear.PerformanceTests
+ZL.Gear.Extensions.Data.Tests
+src/ZL.Gear.Extensions.Data.Tests
+ZL.Gear.Editor
+agent-harness
+libs
+docs
+snapshots
+demos/SeatDemo
+demos/InstrumentTest
+demos/ZL.Gear.ConsoleApp
+tests/ZL.Gear.PerformanceTests
+samples
+logs
+test_keys.csx
+test_keys.py
+debug_keys.py
+fix_dynamic_flow.py
