@@ -22,6 +22,12 @@
 | ZL.Gear.Demos | `../ZL.Gear.Demos/` |
 | ZL.Gear.Docs | `../ZL.Gear.Docs/` |
 
+## 历史清理（方案 A · 2026-09-12）
+
+已执行 `git filter-repo`（清单见 `.filter-repo-paths-to-remove.txt`）。  
+**87 → 65 commits**；历史 blob 中 **0** 条 Drivers/HSL/私有路径命中。  
+灾备镜像：`../ZL.Gear.mirror-backup-20260912_120534.git`（**勿 push / 勿公开**）。
+
 ## 公开 push 前门禁（G0-6 摘要）
 
 ```bash
