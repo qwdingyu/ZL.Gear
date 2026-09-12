@@ -98,6 +98,22 @@ var result = await executor.ExecuteAsync(steps, model: "MyLine", barcode: "SN001
 
 **不要复制**：`VerificationCatalog.cs`（CI 门禁）、`verify.sh`（除非你也做发版门禁）。
 
+### 5.1 仅 NuGet、未 clone 本仓库
+
+若你只安装了包、没有 IndustryKit 目录：
+
+```bash
+dotnet add package ZL.Gear.Core
+dotnet add package ZL.Gear.Engine
+```
+
+1. 在解决方案中新建类库 `YourIndustry.Extension`（引用 Core），实现 `IGearExtension` + 三个 Handler（可参考 GitHub 上 `demos/IndustryKit/ZL.Gear.Extension.Station`）。  
+2. 新建控制台/WinForms 宿主，粘贴上文 **宿主最小代码**，把 `StationExtension` 换成你的扩展。  
+3. 将 `Station_HappyPath.json` 复制到输出目录 `Scenarios/`（或任意路径，`ScenarioLoader.Load` 传绝对路径）。  
+4. 本地验证：`dotnet run -- run path/to/Station_HappyPath.json`（若你复制了 IndustryKit Client 的 `run` 命令逻辑）。
+
+> 完整可运行样板仍需从本仓库 `demos/IndustryKit/` 复制；NuGet 只提供框架内核，不含 Demo 工程。
+
 ---
 
 ## 6. 三条铁律（产线安全，docs/004 展开）
