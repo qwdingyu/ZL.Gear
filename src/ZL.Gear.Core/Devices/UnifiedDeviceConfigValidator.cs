@@ -11,7 +11,9 @@ namespace ZL.Gear.Core.Devices
     /// </summary>
     public class ConfigValidationResult
     {
-        public bool IsValid => Errors.Count == 0 && Warnings.Count == 0;
+        // P2-3：Warning 仅作诊断提示，不应把"建议项缺失"判定为配置无效；
+        // 生产环境如需严格门禁，由宿主配置 WarningsAsErrors 策略显式升级。
+        public bool IsValid => Errors.Count == 0;
         public List<string> Errors { get; } = new List<string>();
         public List<string> Warnings { get; } = new List<string>();
 

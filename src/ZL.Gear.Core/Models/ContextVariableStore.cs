@@ -152,30 +152,17 @@ namespace ZL.Gear.Core.Models
 
         public void Dispose()
         {
-            // 递归清理当前层和所有父作用域
-            DisposeRecursive(this);
-            _store.Clear();
-        }
-
-        private static void DisposeRecursive(ContextVariableStore store)
-        {
-            if (store == null) return;
-
-            // 先递归清理父作用域
-            if (store._parent != null)
-            {
-                DisposeRecursive(store._parent);
-            }
-
-            // 清理当前层
-            foreach (var kvp in store._store)
+            // P1-6：只释放当前作用域自己拥有的 _store，绝不递归释放父作用域。
+            // 父作用域（含 root 的信令 TCS/CTS）由各自的拥有者（Run Scope）负责释放，
+            // 避免子 Scope 提前释放共享父级信令对象导致并行节点失控。
+            foreach (var kvp in _store)
             {
                 if (kvp.Value is IDisposable disposable)
                 {
                     try { disposable.Dispose(); } catch { /* Dispose 不应抛出异常 */ }
                 }
             }
-            store._store.Clear();
+            _store.Clear();
         }
     }
 }
