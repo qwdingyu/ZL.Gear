@@ -47,6 +47,9 @@ env -i PATH="$PATH" HOME="$HOME" bash demos/IndustryKit/verify.sh
 ! rg -l 'ZL\.Gear\.Drivers' --glob '*.csproj' .
 test ! -d ZL.Gear.Drivers
 
+# G0-7：IndustryKit verify 依赖的 7 JSON + 3 Client 源文件须 git 跟踪
+bash scripts/public-guard.sh   # 内含 G0-7
+
 # G0-5
 bash check_release_public.sh
 ```
