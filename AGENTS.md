@@ -2,12 +2,22 @@
 
 ## 1. 项目概述
 
-Gear.NET 是 .NET 工业自动化微编排框架，采用洋葱架构（Onion Architecture）。**可发布框架 DL vs Demo/业务** 见 [docs/143](./docs/143_产品定位与可发布DL边界_仓库分拣指南_2026-09-11.md)。核心模块：
-- **ZL.Gear.Core**: 核心契约与抽象层
-- **ZL.Gear.Drivers**: 设备驱动层
-- **ZL.Gear.Engine**: 执行引擎层
-- **ZL.Gear.Sensing**: 采样与测量层
-- **ZL.Gear.Extension.***: 业务扩展层
+Gear.NET 是 .NET 工业自动化微编排框架，采用洋葱架构（Onion Architecture）。
+
+**工作区（2026-09-12）**：`/Users/dingyuwang/0-X/ZL.Gear.All/` · **五仓分仓真值源**：私有仓 `ZL.Gear.Docs` / `167_五仓分仓与Gear.All工作区指南` · 本仓边界见 [`REPO_BOUNDARY.md`](./REPO_BOUNDARY.md)
+
+| 仓 | 路径 | 远程 |
+|----|------|------|
+| 公开框架 | `ZL.Gear/` | GitHub MIT（**暂不 push**） |
+| 私有驱动 | `../ZL.Gear.Drivers/` | private |
+| 私有行业包 | `../ZL.Gear.Exts/` | private |
+| 私有 Demo | `../ZL.Gear.Demos/` | private |
+| 私有文档 | `../ZL.Gear.Docs/` | private |
+
+本目录（`ZL.Gear`）核心模块：
+- **ZL.Gear.Core** / **ZL.Gear.Engine** / **ZL.Gear.Sensing**：框架 DL
+- **demos/IndustryKit**：MIT 教学模板（仅引 Core）
+- **Drivers / ConsoleApp / 内部 docs**：在 ** sibling 私有仓**，不在本仓 git 范围
 
 ---
 
@@ -25,7 +35,7 @@ dotnet build ZL.Gear.sln -c Release
 
 ```bash
 dotnet build src/ZL.Gear.Core/ZL.Gear.Core.csproj
-dotnet build ZL.Gear.Drivers/ZL.Gear.Drivers.csproj
+dotnet build ../ZL.Gear.Drivers/ZL.Gear.Drivers/ZL.Gear.Drivers.csproj
 dotnet build src/ZL.Gear.Engine/ZL.Gear.Engine.csproj
 dotnet build src/ZL.Gear.Sensing/ZL.Gear.Sensing.csproj
 dotnet build ZL.Gear.Extension.Seat/ZL.Gear.Solutions.Seat.csproj
@@ -39,13 +49,13 @@ dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.I
 dotnet test ZL.Gear.sln
 
 # 运行单个测试项目
-dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj
+dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj
 
 # 运行单个测试类
-dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests"
+dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests"
 
 # 运行单个测试方法
-dotnet test ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
+dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
 
 # Extensions.Data.Tests（已在 ZL.Gear.sln；check_release 第 7 步 Release 专项仍保留）
 dotnet test src/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
@@ -353,7 +363,7 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 - verify **只跑 HappyPath**（须含故意 FAIL + 超时）
 - Assert L1 `Check` 写 `&&`（须拆成多条单条件 Assert）
 
-**已验证模板：** `demos/IndustryKit/` · 场景库权威目录 `demos/ZL.Gear.ConsoleApp/Scenarios/`（勿从 `docs/archive/` 复制）。
+**已验证模板：** `demos/IndustryKit/` · 全栈场景库 `../ZL.Gear.Demos/ZL.Gear.ConsoleApp/Scenarios/`（私有 Demos 仓）。
 
 **合规单测（非全仓 bot）：** `IndustryKitHandlerComplianceTests` 扫描模板三 Handler，禁止 `Variables.Set` / `context.Get` / 限值 `All`。
 

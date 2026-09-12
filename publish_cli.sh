@@ -13,7 +13,7 @@ echo "=================================================="
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-CONSOLE_PROJ="demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj"
+CONSOLE_PROJ="../ZL.Gear.Demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj"
 PUBLISH_DIR="PublishOutput"
 
 if [ -d "$PUBLISH_DIR" ]; then
@@ -28,8 +28,8 @@ dotnet publish "$CONSOLE_PROJ" -c Release -o "$PUBLISH_DIR" /p:UseAppHost=true
 
 echo ""
 echo "3. 复制必需的外围资产 (Scenarios / Protocols) 到发布包..."
-cp -R "demos/ZL.Gear.ConsoleApp/Scenarios" "$PUBLISH_DIR/"
-cp -R "demos/ZL.Gear.ConsoleApp/Protocols" "$PUBLISH_DIR/"
+cp -R "../ZL.Gear.Demos/ZL.Gear.ConsoleApp/Scenarios" "$PUBLISH_DIR/"
+cp -R "../ZL.Gear.Demos/ZL.Gear.ConsoleApp/Protocols" "$PUBLISH_DIR/"
 
 echo "4. 设置可执行权限..."
 # 在 Mac/Linux 上为了能直接敲应用名运行，需要赋予可执行权限
