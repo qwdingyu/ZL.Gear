@@ -8,22 +8,22 @@ fail() { echo "❌ G0 门禁失败: $*" >&2; exit 1; }
 
 echo "=== public-guard (G0) ==="
 
-if rg -q LicenseGuard src/ZL.Gear.Engine 2>/dev/null; then
+if grep -rqn "LicenseGuard" --include="*.cs" src/ZL.Gear.Engine 2>/dev/null; then
   fail "src/ZL.Gear.Engine 仍含 LicenseGuard"
 fi
-if rg -q 'ZL\.License' src/ZL.Gear.Engine/ZL.Gear.Engine.csproj 2>/dev/null; then
+if grep -q 'ZL\.License' src/ZL.Gear.Engine/ZL.Gear.Engine.csproj 2>/dev/null; then
   fail "Engine csproj 仍引用 ZL.License"
 fi
-if rg -l HslCommunication --glob '*.csproj' . 2>/dev/null; then
+if grep -rl "HslCommunication" --include="*.csproj" . 2>/dev/null; then
   fail "csproj 仍引用 HslCommunication"
 fi
-if rg -l 'ZL\.Gear\.Drivers' --glob '*.csproj' . 2>/dev/null; then
+if grep -rl 'ZL\.Gear\.Drivers' --include="*.csproj" . 2>/dev/null; then
   fail "csproj 仍引用 ZL.Gear.Drivers"
 fi
 if test -d ZL.Gear.Drivers; then
   fail "仓库内不应存在 ZL.Gear.Drivers 目录"
 fi
-if rg -q 'ZL_GEAR_LICENSE_TEST_MODE' check_release_public.sh demos/IndustryKit/verify.sh 2>/dev/null; then
+if grep -q 'ZL_GEAR_LICENSE_TEST_MODE' check_release_public.sh demos/IndustryKit/verify.sh 2>/dev/null; then
   fail "公开 CI 脚本仍含 TestMode bypass"
 fi
 
