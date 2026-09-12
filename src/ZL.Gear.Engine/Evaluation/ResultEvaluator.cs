@@ -171,6 +171,10 @@ namespace ZL.Gear.Engine.Evaluation
                     case "equals":
                     case "lcl_only":
                     case "ucl_only":
+                    case "less_lcl":
+                    case "less_ucl":
+                    case "big_lcl":
+                    case "big_ucl":
                         return CheckNumeric(spec, rawValue, mode);
 
                     // --- 2. 逻辑类 (工控核心) ---
@@ -178,14 +182,15 @@ namespace ZL.Gear.Engine.Evaluation
                         return CheckBoolean(spec, rawValue);
 
                     // --- 3. 位操作类 (工控/协议核心) ---
-                    case "mask":    // (Val & Mask) == Expected
-                    case "bit_set": // (Val >> Index) & 1 == Expected
+                    case "mask":
+                    case "bit_set":
                         return CheckBitwise(spec, rawValue, mode);
 
                     // --- 4. 字符串/正则类 (MES/追溯核心) ---
                     case "regex":
                     case "string_equals":
                     case "contains":
+                    case "not_contains":
                         return CheckString(spec, rawValue, mode);
 
                     case "has_value":
@@ -241,6 +246,42 @@ namespace ZL.Gear.Engine.Evaluation
                 case "ucl_only":
                     passed = !spec.UCL.HasValue || finalVal <= spec.UCL.Value;
                     criteria = $"<= {spec.UCL}";
+                    break;
+                case "less_lcl":
+                    if (!spec.LCL.HasValue)
+                    {
+                        return (false, $"[FAIL] {spec.Key}: less_lcl 模式必须配置有效 LCL（LCL 为空或为 -∞ 无意义）", finalVal);
+                    }
+                    passed = finalVal < spec.LCL.Value;
+                    criteria = $"< {spec.LCL}";
+                    break;
+                case "less_ucl":
+                    if (!spec.UCL.HasValue)
+                    {
+                        passed = true;
+                        criteria = $"< +∞";
+                        return (true, $"[PASS] {spec.Key}: {valStr} 符合规格 {criteria}", finalVal);
+                    }
+                    passed = finalVal < spec.UCL.Value;
+                    criteria = $"< {spec.UCL}";
+                    break;
+                case "big_lcl":
+                    if (!spec.LCL.HasValue)
+                    {
+                        passed = true;
+                        criteria = $"> -∞";
+                        return (true, $"[PASS] {spec.Key}: {valStr} 符合规格 {criteria}", finalVal);
+                    }
+                    passed = finalVal > spec.LCL.Value;
+                    criteria = $"> {spec.LCL}";
+                    break;
+                case "big_ucl":
+                    if (!spec.UCL.HasValue)
+                    {
+                        return (false, $"[FAIL] {spec.Key}: big_ucl 模式配置了 +∞ 上限（无意义），请设置具体 UCL", finalVal);
+                    }
+                    passed = finalVal > spec.UCL.Value;
+                    criteria = $"> {spec.UCL}";
                     break;
             }
 
@@ -319,6 +360,10 @@ namespace ZL.Gear.Engine.Evaluation
                 case "contains":
                     passed = strVal.IndexOf(expectedStr, StringComparison.OrdinalIgnoreCase) >= 0;
                     desc = $"包含 '{expectedStr}'";
+                    break;
+                case "not_contains":
+                    passed = strVal.IndexOf(expectedStr, StringComparison.OrdinalIgnoreCase) < 0;
+                    desc = $"不包含 '{expectedStr}'";
                     break;
                 case "regex":
                     // 增加 try-catch 防止正则表达式格式错误导致崩
