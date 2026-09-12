@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using ZL.Gear.Testing.Common;
 
@@ -107,9 +108,9 @@ namespace ZL.Gear.Core.Tests
             {
                 var text = File.ReadAllText(file);
                 var pattern = @"\{\s*""Type""\s*:\s*""(?:Parallel|Group)""[^}]*""Children""\s*:\s*\[[^\]]*\{\s*""Type""\s*:\s*""Measure""";
-                var matches = System.Text.RegularExpressions.Regex.Matches(
-                    text, pattern, System.Text.RegularExpressions.RegexOptions.Singleline);
-                foreach (System.Text.RegularExpressions.Match m in matches)
+                var matches = Regex.Matches(
+                    text, pattern, RegexOptions.Singleline);
+                foreach (Match m in matches)
                 {
                     hits.Add($"{Path.GetFileName(file)}: 发现 Parallel/Group 内嵌 Measure 子节点");
                 }
@@ -117,6 +118,60 @@ namespace ZL.Gear.Core.Tests
 
             Assert.That(hits, Is.Empty,
                 "DynamicFlow 并行节点 Parallel/Group 不得直接包含 Measure 子节点，须拆分为 Sequence：\n" + string.Join("\n", hits));
+        }
+
+        [Test]
+        public void IndustryKit_Handlers_ParameterSchema键须有读取调用()
+        {
+            // docs/009 §3.5 #2：ParameterSchema 与 StepArgsReader 读取人工对齐。
+            // 仅做静态一致性（Schema 声明的每个键在 Handler 中必须有读取调用），不做运行时自动绑定（docs/121 已否决）。
+            var dir = GearTestPaths.IndustryKitHandlersDir(TestContext.CurrentContext.TestDirectory);
+            Assert.That(Directory.Exists(dir), Is.True, $"IndustryKit Handlers 目录不存在: {dir}");
+
+            // Schema 声明键：形如 "RecipeId:string ...; LimitOhm:double+ ..."
+            var schemaKeyRegex = new Regex(@"(?:^|;\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:");
+            // Handler 源码中的字符串键字面量（TryRequire*/GetOptional*/GetFlowString/HasArgKey 等参数读取形态）
+            var literalKeyRegex = new Regex(@"""(?<key>[A-Za-z_][A-Za-z0-9_]*)""");
+
+            var failures = new List<string>();
+            foreach (var file in Directory.GetFiles(dir, "*Handler.cs"))
+            {
+                var text = File.ReadAllText(file);
+                var schemaMatch = Regex.Match(text, @"ParameterSchema\s*=\s*""(?<schema>[^""]*)""");
+                if (!schemaMatch.Success)
+                {
+                    continue;
+                }
+
+                var schemaKeys = schemaKeyRegex.Matches(schemaMatch.Groups["schema"].Value)
+                    .Cast<Match>()
+                    .Select(m => m.Groups[1].Value)
+                    .Distinct()
+                    .ToList();
+                if (schemaKeys.Count == 0)
+                {
+                    continue; // MarkComplete 无必填 Args，无声明键
+                }
+
+                var readKeys = literalKeyRegex.Matches(text)
+                    .Cast<Match>()
+                    .Select(m => m.Groups["key"].Value)
+                    .ToHashSet();
+
+                foreach (var key in schemaKeys)
+                {
+                    if (!readKeys.Contains(key))
+                    {
+                        failures.Add(
+                            $"{Path.GetFileName(file)}: ParameterSchema 声明键 '{key}' 在 Handler 中无读取调用"
+                            + "（TryRequire*/GetOptional*/GetFlowString/HasArgKey）");
+                    }
+                }
+            }
+
+            Assert.That(failures, Is.Empty,
+                "ParameterSchema 声明键须与 StepArgsReader 读取人工对齐（docs/009 §3.5）：\n"
+                + string.Join("\n", failures));
         }
     }
 }

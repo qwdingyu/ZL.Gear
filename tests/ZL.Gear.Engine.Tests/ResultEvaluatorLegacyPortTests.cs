@@ -63,7 +63,7 @@ namespace ZL.Gear.Engine.Tests
 
         #endregion
 
-        #region less_lcl / big_lcl — legacy 有、公开缺
+        #region less_lcl / big_lcl — strict 比较模式回归
 
         [Test]
         public void Legacy_less_lcl_严格小于LCL_通过()

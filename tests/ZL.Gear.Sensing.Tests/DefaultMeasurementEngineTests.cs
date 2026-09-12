@@ -47,18 +47,18 @@ namespace ZL.Gear.Sensing.Tests
             var engine = new DefaultMeasurementEngine<double>(_ => { });
             var config = new SamplingConfig<double>
             {
-                TotalTimeoutMs = 50,
+                TotalTimeoutMs = 120,
                 Trigger = new ImmediateTrigger<double>(),
-                Strategy = new FixedCountStrategy<double>(10)
+                Strategy = new FixedCountStrategy<double>(100)
             };
 
-            // 持续发送样本但不满足完成条件，让总超时生效
+            // 慢速样本流：在总超时前无法凑齐目标数量，稳定触发 TimedOut
             var dataStream = Observable.Generate(
                 0,
                 i => true,
                 i => i + 1,
                 i => (double)i,
-                i => TimeSpan.FromMilliseconds(5));
+                i => TimeSpan.FromMilliseconds(30));
 
             var result = await engine.ExecuteAsync(dataStream, config, CancellationToken.None);
 
