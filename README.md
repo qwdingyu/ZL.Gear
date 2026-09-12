@@ -33,4 +33,4 @@ dotnet add package ZL.Gear.Engine    # LogicOnly；Instrumented 驱动在私有 
 
 ## 版本
 
-当前公开轨 **v1.0.0**（MIT）。Instrumented 驱动与 ConsoleApp 场景库在 sibling 私有仓，不在本仓库。
+当前公开轨 **v1.0.1**（MIT）。Instrumented 驱动与 ConsoleApp 场景库在 sibling 私有仓，不在本仓库。

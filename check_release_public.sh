@@ -8,16 +8,16 @@ echo "===================================================="
 echo "ZL.Gear 公开轨质量门"
 echo "===================================================="
 
-echo "[0/5] public-guard (G0) ..."
+echo "[0/6] public-guard (G0) ..."
 bash scripts/public-guard.sh
 
-echo "[1/5] dotnet build ZL.Gear.sln ..."
+echo "[1/6] dotnet build ZL.Gear.sln ..."
 dotnet build ZL.Gear.sln -c Release -v q
 
-echo "[2/5] Extensions.Data 单元测试 ..."
+echo "[2/6] Extensions.Data 单元测试 ..."
 dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q --no-build
 
-echo "[3/5] IndustryKit verify (零 bypass) ..."
+echo "[3/6] IndustryKit verify (零 bypass) ..."
 bash demos/IndustryKit/verify.sh
 
 echo "[4/6] ExprDialectProof ..."
