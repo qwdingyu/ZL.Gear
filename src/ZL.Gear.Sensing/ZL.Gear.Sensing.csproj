@@ -18,4 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\ZL.Gear.Core\ZL.Gear.Core.csproj" />
   </ItemGroup>
+
+  <!-- SampleSignals 真值在 ZL.Gear.Core；避免 CS0433 重复类型 -->
+  <ItemGroup>
+    <Compile Remove="Sampling\SampleSignal\SampleSignals.cs" />
+  </ItemGroup>
 </Project>

@@ -117,6 +117,14 @@ namespace ZL.Gear.Core.Models
             Metadata = new ReadOnlyDictionary<string, object>(metadata ?? new Dictionary<string, object>());
         }
 
+        /// <summary>
+        /// legacy 5 参数构造（StepHandlerKit / CommonHandler 兼容）。
+        /// </summary>
+        public Measurement(string key, object value, bool success, string message = "", int samplesCollected = 1)
+            : this(key, value, success, message ?? string.Empty, samplesCollected > 0 ? samplesCollected : 1, string.Empty, DateTime.UtcNow, null)
+        {
+        }
+
         #endregion
 
         #region 工厂方法（静态）
@@ -162,6 +170,14 @@ namespace ZL.Gear.Core.Models
         /// <summary>
         /// 从 DeviceReading 创建设备测量结果
         /// </summary>
+        /// <summary>legacy 别名。</summary>
+        public static Measurement CreateFromReading(
+            string key,
+            DeviceReading reading,
+            Func<object, object> valueTransformer = null,
+            string successMessage = "操作成功")
+            => FromReading(key, reading, valueTransformer, successMessage);
+
         public static Measurement FromReading(
             string key,
             DeviceReading reading,

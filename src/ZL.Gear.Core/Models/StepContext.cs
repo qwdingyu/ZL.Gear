@@ -20,6 +20,14 @@ namespace ZL.Gear.Core.Models
         // === 基础属性 ===
         public string StepKey { get; private set; }
         /// <summary>
+        /// 产品标识（条码/型号），legacy CommandContext.LogTag 与 Bus 日志用。
+        /// </summary>
+        public string ProductInfo =>
+            TryReadGlobalString("ProductInfo")
+            ?? TryReadGlobalString("Barcode")
+            ?? TryReadGlobalString("Model")
+            ?? string.Empty;
+        /// <summary>
         /// 当前步骤的配置
         /// </summary>
         public StepConfig StepConfig { get; set; }
@@ -179,6 +187,15 @@ namespace ZL.Gear.Core.Models
 
             throw new InvalidCastException($"已租用的设备 '{deviceKey}' 的类型为 '{device.GetType().Name}'，与请求的类型 '{typeof(TDevice).Name}' 不匹配。");
         }
+        private string TryReadGlobalString(string key)
+        {
+            if (GlobalContext != null && GlobalContext.TryGetValue(key, out var obj) && obj != null)
+            {
+                return obj.ToString();
+            }
+            return null;
+        }
+
         private bool TryConvert<T>(object obj, out T result)
         {
             if (obj == null) { result = default; return false; }

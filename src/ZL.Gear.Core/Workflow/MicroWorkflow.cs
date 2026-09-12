@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -578,7 +578,12 @@ namespace ZL.Gear.Core.Workflow
                 var delayTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
 
                 var completed = await Task.WhenAny(chainTask, delayTask).ConfigureAwait(false);
-                if (completed == delayTask)
+                // 超时契约确定性（verify timeout-contract 抖动根因）：链内节点与守卫计时器由同一
+                // Linked Token 驱动，~timeout 时刻存在调度竞态——链内 Task.Delay 的取消异常可能先于
+                // delayTask 完成被 WhenAny 报告，导致取消异常窜到上层被 catch 成「操作超时或被取消。」，
+                // 使超时契约消息偶发丢失。此处只要流程级超时令牌已触发，一律返回统一的超时契约消息。
+                if (completed == delayTask
+                    || (_workflowTimeoutCts != null && _workflowTimeoutCts.IsCancellationRequested))
                 {
                     // 超时已触发：再次确保取消信号发出，促使观察了 Token 的步骤尽快退出
                     try

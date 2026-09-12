@@ -141,6 +141,16 @@ namespace ZL.Gear.Sensing.Orchestration
         {
             if (samples.Count == 0)
             {
+                if (status == ExeStatus.TimedOut)
+                {
+                    return ExeResult<T>.TimedOut(samples.AsReadOnly(), message);
+                }
+
+                if (status == ExeStatus.Cancelled)
+                {
+                    return ExeResult<T>.Cancelled(samples.AsReadOnly());
+                }
+
                 return ExeResult<T>.Failed($"[{message}] 未采集到任何有效样本", samples.AsReadOnly());
             }
 
