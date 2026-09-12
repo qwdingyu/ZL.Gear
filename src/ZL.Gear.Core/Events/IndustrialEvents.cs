@@ -30,11 +30,10 @@ namespace ZL.Gear.Core.Events
         public bool IsTest { get; }
         public int Mode { get; }
         public bool IsSafe { get; }
-        public bool TwoHandStart { get; }
 
-        public PlcAutoManualEvent(bool isRunning, bool isReset, bool isTest, int mode, bool isSafe, bool twoHandStart)
+        public PlcAutoManualEvent(bool isRunning, bool isReset, bool isTest, int mode, bool isSafe)
         {
-            IsRunning = isRunning; IsReset = isReset; IsTest = isTest; Mode = mode; IsSafe = isSafe; TwoHandStart = twoHandStart;
+            IsRunning = isRunning; IsReset = isReset; IsTest = isTest; Mode = mode; IsSafe = isSafe;
         }
     }
 

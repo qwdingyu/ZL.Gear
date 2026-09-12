@@ -37,7 +37,7 @@ namespace ZL.Gear.Sensing
         public void Reset() { /* 无状态，无需操作 */ }
     }
     /// <summary>
-    /// 单一条件满足即可，用于场景：安全带锁扣插入
+    /// 单一条件满足即可启动，用于场景：开关量到位或脉冲到达。
     /// </summary>
     /// <typeparam name="T"></typeparam>
     public class ConditionalTrigger<T> : IExecutionTrigger<T>
