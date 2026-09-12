@@ -6,7 +6,7 @@ using ZL.Gear.Testing.Common;
 namespace ZL.Gear.Core.Tests
 {
     [TestFixture]
-    public class LegacyCompatibilityTests
+    public class CoreLegacyApiTests
     {
         [Test]
         public void Measurement_legacy五参数构造_保留Success与SamplesCollected()
@@ -29,6 +29,5 @@ namespace ZL.Gear.Core.Tests
 
             Assert.AreEqual("SN-001", context.ProductInfo);
         }
-
     }
 }
