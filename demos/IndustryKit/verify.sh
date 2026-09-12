@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # IndustryKit 闭环验证门禁
-# CI/Dev 授权：与 check_release.sh / TestSetup 一致（docs/141 §10.5(4)）
+# CI/Dev 授权：与 check_release_public.sh / TestSetup 一致
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"

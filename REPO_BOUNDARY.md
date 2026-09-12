@@ -8,7 +8,8 @@
 | 路径 | 说明 |
 |------|------|
 | `src/ZL.Gear.{Core,Engine,Sensing,Abstractions,Extensions.Data}` | 框架 DL · MIT |
-| `src/ZL.Gear.Extensions.Data.Tests` | 公开 CI 测试 |
+| `tests/ZL.Gear.Extensions.Data.Tests` | 公开 CI 测试 |
+| `check_release_public.sh` | 公开轨质量门（不含 Drivers/Demos） |
 | `demos/IndustryKit/` | MIT 教学模板（仅引 Core/Engine） |
 | `tools/ExprDialectProof` | 表达式方言门禁 |
 | `tests/LicenseEnvTest` | 授权环境测试（待 PR-A 后评估迁私有仓） |
@@ -25,8 +26,7 @@
 ## 历史清理（方案 A · 2026-09-12）
 
 已执行 `git filter-repo`（清单见 `.filter-repo-paths-to-remove.txt`）。  
-**87 → 65 commits**；历史 blob 中 **0** 条 Drivers/HSL/私有路径命中。  
-灾备镜像：`../ZL.Gear.mirror-backup-20260912_120534.git`（**勿 push / 勿公开**）。
+历史 blob 中 **0** 条 Drivers/HSL/私有路径命中。本地 `.git/filter-repo/` 导出缓存已删除。
 
 ## 公开 push 前门禁（G0-6 摘要）
 

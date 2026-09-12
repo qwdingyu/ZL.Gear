@@ -63,7 +63,7 @@ dotnet test src/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.cspr
 
 ### 2.4 发版门禁与场景验证
 
-**真值源：`check_release.sh`（当前 9 步）**——含 sln 编译/测试、ExprDialectProof、FullIntegration/Moat、IndustryKit verify、Extensions.Data.Tests、Sync、Continuous 采样橱窗。
+**公开轨真值源：`check_release_public.sh`（4 步）**——`ZL.Gear.sln` 编译、Extensions.Data 测试、IndustryKit verify、ExprDialectProof。全栈 9 步回归在 sibling 私有仓 / `Gear.All` 工作区（不在本仓 push 范围）。
 
 ```bash
 bash check_release.sh
