@@ -1,10 +1,8 @@
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using Microsoft.Extensions.DependencyInjection;
-using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Models;
+using ZL.Gear.Testing.Common;
 
 namespace ZL.Gear.Core.Tests
 {
@@ -13,11 +11,7 @@ namespace ZL.Gear.Core.Tests
     {
         private StepConfig _step;
         private StepContext _context;
-
-        private class ServiceProviderStub : IServiceProvider
-        {
-            public object GetService(Type serviceType) => null;
-        }
+        private ContextVariableStore _variables;
 
         [SetUp]
         public void Setup()
@@ -34,9 +28,9 @@ namespace ZL.Gear.Core.Tests
                 }
             };
 
-            var variables = new ContextVariableStore();
-            variables.SetShared("RecipeId", "R-VAR-001");
-            variables.SetShared("LimitOhm", 200.0);
+            _variables = new ContextVariableStore();
+            _variables.SetShared("RecipeId", "R-VAR-001");
+            _variables.SetShared("LimitOhm", 200.0);
 
             var globalContext = new Dictionary<string, object>
             {
@@ -44,16 +38,7 @@ namespace ZL.Gear.Core.Tests
                 { "Model", "MODEL-A" }
             };
 
-            _context = new StepContext(
-                stepKey: _step.StepKey,
-                stepCfg: _step,
-                activeDevices: new Dictionary<string, IDevice>(),
-                serviceProvider: new ServiceProviderStub(),
-                token: CancellationToken.None,
-                runTestMode: RunTestMode.Auto,
-                variables: variables,
-                globalContext: globalContext
-            );
+            _context = StepContextFactory.CreateLogicOnly(_step, _variables, globalContext);
         }
 
         #region ArgsOnly
@@ -130,11 +115,25 @@ namespace ZL.Gear.Core.Tests
         [Test]
         public void TryRequireString_ArgsThenVariables_Args不存在时取Variables()
         {
+            _step.Parameters.Remove("RecipeId");
             var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
             var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsThenVariables, out var value, out var error);
 
             Assert.IsTrue(result);
-            Assert.AreEqual("R001", value); // Args 存在，取 Args
+            Assert.AreEqual("R-VAR-001", value);
+            Assert.IsNull(error);
+        }
+
+        [Test]
+        public void TryRequireString_ArgsThenVariables_Args值为null时回退Variables()
+        {
+            _step.Parameters["RecipeId"] = null;
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsThenVariables, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("R-VAR-001", value);
+            Assert.IsNull(error);
         }
 
         [Test]
@@ -222,7 +221,32 @@ namespace ZL.Gear.Core.Tests
 
         #endregion
 
-        #region SetShared / GetFlowString
+        #region SetShared / GetFlowString / TryRequireFlowString
+
+        [Test]
+        public void TryRequireFlowString_流程变量存在_返回成功()
+        {
+            var reader = StepArgsReader.From(_step, _context, "MarkComplete");
+            reader.SetShared("RecipeId", "FLOW-RECIPE-01");
+
+            var ok = reader.TryRequireFlowString("RecipeId", out var value, out var error);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("FLOW-RECIPE-01", value);
+            Assert.IsNull(error);
+        }
+
+        [Test]
+        public void TryRequireFlowString_流程变量缺失_返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "MarkComplete");
+
+            var ok = reader.TryRequireFlowString("PriorStepOutput", out var value, out var error);
+
+            Assert.IsFalse(ok);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("PriorStepOutput"));
+        }
 
         [Test]
         public void SetShared_写入流程变量_后继可读()

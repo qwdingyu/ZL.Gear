@@ -1,13 +1,10 @@
 using NUnit.Framework;
 using System;
-using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using ZL.Gear.Core.Devices;
-using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Workflow;
+using ZL.Gear.Testing.Common;
 
 namespace ZL.Gear.Core.Tests
 {
@@ -16,11 +13,6 @@ namespace ZL.Gear.Core.Tests
     {
         private StepConfig _step;
         private StepContext _context;
-
-        private class ServiceProviderStub : IServiceProvider
-        {
-            public object GetService(Type serviceType) => null;
-        }
 
         [SetUp]
         public void Setup()
@@ -32,16 +24,7 @@ namespace ZL.Gear.Core.Tests
                 Parameters = new System.Collections.Generic.Dictionary<string, object>()
             };
 
-            var variables = new ContextVariableStore();
-            _context = new StepContext(
-                stepKey: _step.StepKey,
-                stepCfg: _step,
-                activeDevices: new Dictionary<string, IDevice>(),
-                serviceProvider: new ServiceProviderStub(),
-                token: CancellationToken.None,
-                runTestMode: RunTestMode.Auto,
-                variables: variables
-            );
+            _context = StepContextFactory.CreateLogicOnly(_step);
         }
 
         #region Then 短路逻辑
@@ -95,7 +78,7 @@ namespace ZL.Gear.Core.Tests
             await using var workflow = MicroWorkflow.Start(_step, _context);
             workflow.ThenMeasure("Measure1", (s, c) =>
             {
-                measurement = Measurement.Succeeded("Voltage", 12.5, "V", "正常");
+                measurement = Measurement.Succeeded("Voltage", 12.5, "正常", "V");
                 return Task.FromResult(measurement);
             });
 
