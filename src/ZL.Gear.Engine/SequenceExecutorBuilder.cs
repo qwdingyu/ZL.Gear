@@ -296,6 +296,10 @@ namespace ZL.Gear.Engine
             {
                 throw new InvalidOperationException("LogicOnly 模式禁止加载 devices.json。");
             }
+            if (_deviceHostMode == DeviceHostMode.LogicOnly && _builtInModules != BuiltInModules.Core)
+            {
+                throw new InvalidOperationException("LogicOnly Demo 宿主仅允许 BuiltInModules.Core。");
+            }
             if (_deviceHostMode == DeviceHostMode.Instrumented && _customDeviceService == null)
             {
                 throw new InvalidOperationException("Instrumented 模式必须注入 IDeviceService（WithDeviceService / AsInstrumentedHost）。");
