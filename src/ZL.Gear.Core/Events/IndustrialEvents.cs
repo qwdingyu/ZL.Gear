@@ -73,21 +73,4 @@ namespace ZL.Gear.Core.Events
         }
     }
 
-    /// <summary>
-    /// PLC 传递给 MES 或上位机的核心产品码事件
-    /// </summary>
-    public class PlcMesCodeEvent : BaseEvent
-    {
-        public short SeatCode { get; }
-        public short Dzjdq { get; } // 电子继电器
-        public short Dljdq { get; } // 独立继电器
-
-        public PlcMesCodeEvent(short seatCode, short dzjdq, short dljdq)
-        {
-            SeatCode = seatCode;
-            Dzjdq = dzjdq;
-            Dljdq = dljdq;
-        }
-    }
-
 }
