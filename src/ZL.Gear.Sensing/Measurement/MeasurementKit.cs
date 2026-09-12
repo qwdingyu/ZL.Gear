@@ -694,8 +694,11 @@ namespace ZL.Gear.Sensing
         private void NotifyRealTimeValue<T>(string stepKey, string target, T sample)
         {
             // 注意：Events 最好在 UI 层做 Throttling (节流)，防止高频刷新卡死 UI
-            if (sample is double d) TestEvents.RealTimeValueChanged?.Invoke(stepKey, target, d);
-            else if (sample is IConvertible c) TestEvents.RealTimeValueChanged?.Invoke(stepKey, target, c.ToDouble(null));
+            object payload = sample is double d ? d : (object)(sample is IConvertible c ? c.ToDouble(null) : sample);
+            if (payload != null)
+            {
+                RealtimeSamplePublishing.Sink.Publish(stepKey, target, payload);
+            }
         }
 
         private async Task<T> ReadSampleAsync<T>(string stepName, IProtocolHandler handler, string cmd, Func<string, IEnumerable<T>> parser, Action<string> log, CancellationToken token)
