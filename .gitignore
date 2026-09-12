@@ -74,6 +74,8 @@ docs/*.md
 !docs/005_*.md
 !docs/006_*.md
 !docs/007_*.md
+!docs/008_*.md
+tests/ZL.Gear.Integration.Tests/
 demos/SeatDemo/
 demos/InstrumentTest/
 tests/ZL.Gear.PerformanceTests/
