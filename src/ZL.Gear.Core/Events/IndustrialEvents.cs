@@ -21,36 +21,6 @@ namespace ZL.Gear.Core.Events
     }
 
     /// <summary>
-    /// PLC 手自动状态变更
-    /// </summary>
-    public class PlcAutoManualEvent : BaseEvent
-    {
-        public bool IsRunning { get; }
-        public bool IsReset { get; }
-        public bool IsTest { get; }
-        public int Mode { get; }
-        public bool IsSafe { get; }
-
-        public PlcAutoManualEvent(bool isRunning, bool isReset, bool isTest, int mode, bool isSafe)
-        {
-            IsRunning = isRunning; IsReset = isReset; IsTest = isTest; Mode = mode; IsSafe = isSafe;
-        }
-    }
-
-    /// <summary>
-    /// PLC 坐标/位置变更事件
-    /// </summary>
-    public class PlcLocationEvent : BaseEvent
-    {
-        public float Location { get; }
-
-        public PlcLocationEvent(float location)
-        {
-            Location = location;
-        }
-    }
-
-    /// <summary>
     /// 通用传感器数据变更事件
     /// </summary>
     public class SensorDataEvent : BaseEvent

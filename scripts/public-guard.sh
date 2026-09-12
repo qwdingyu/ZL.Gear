@@ -96,7 +96,13 @@ if find src tests -name '*LegacyCompatibilityTests*' 2>/dev/null | grep -q .; th
 fi
 
 # G0-10 / G-C3：公开 src 禁止行业关键词（tests 白名单除外）
-G0_10_PATTERN='座椅|SBR|SeatCode|UiPlcEvents|ParseSensorSpecs|盐城|NoiseService|安全带|电检|靠背|座垫|自学习|卡扣'
+# 词表口径（2026-09-12 终态追加）：
+#  - 覆盖 座椅/SBR/电检/盐城/自学习/CAN自学习UI/PLC↔UI桥/NoiseService 等全部历史污染词根；
+#  - 追加 ModelStepService|PFLite|Dzjdq|Dljdq|Frm_Seat|SeatTest|AutoSbr|双手启动|TwoHandStart
+#    （本轮实测零命中，防 legacy 词汇随迁移复入公开轨）；
+#  - 有意不收录 PlcAutoManual：ThreadPlcAutoManualEvent 已按 179 §1.3 拆型为通用 PLC Auto/Manual
+#    事件（TwoHandStart 已移除），类名属通用工业语义，非行业词。
+G0_10_PATTERN='座椅|SBR|SeatCode|UiPlcEvents|ParseSensorSpecs|盐城|NoiseService|安全带|电检|靠背|座垫|自学习|卡扣|ModelStepService|PFLite|Dzjdq|Dljdq|Frm_Seat|SeatTest|AutoSbr|双手启动|TwoHandStart'
 if rg -l "$G0_10_PATTERN" src --glob '*.cs' --glob '!**/tests/**' 2>/dev/null; then
   fail "G0-10: 公开 src 仍含行业关键词（见 179 §6.3 扩展词表）"
 fi
@@ -104,6 +110,11 @@ fi
 # G-C9：公开仓不得提供 Seat 命名 Bootstrap 类
 if rg -l 'class Seat\w*Bootstrap|SeatProductionHostBootstrap' src demos --glob '*.cs' 2>/dev/null; then
   fail "G-C9: 公开仓仍含 Seat 命名 Bootstrap 类"
+fi
+
+# G-C10：公开 Sensing 不得绑定座椅 PLC 事件类型名（注释/代码 · G1d-03）
+if rg -l 'PlcAutoManualEvent|PlcLocationEvent|UiPlcEvents' src/ZL.Gear.Sensing --glob '*.cs' 2>/dev/null; then
+  fail "G-C10: Sensing 仍引用座椅 PLC 事件类型（须用泛型 IEvent + 宿主注入）"
 fi
 
 echo "✅ public-guard 通过"
