@@ -58,7 +58,7 @@ dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.cspro
 dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
 
 # Extensions.Data.Tests（已在 ZL.Gear.sln；check_release 第 7 步 Release 专项仍保留）
-dotnet test src/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
+dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
 ```
 
 ### 2.4 发版门禁与场景验证
@@ -73,9 +73,9 @@ bash check_release_public.sh
 
 ```bash
 export ZL_GEAR_FORCE_MOCK=true
-dotnet build demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj
-dotnet run --project ZL.Gear.ConsoleApp --no-build -- \
-  -s demos/ZL.Gear.ConsoleApp/Scenarios/Demo_Sampling_Continuous.json
+dotnet build ../ZL.Gear.Demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj
+dotnet run --project ../ZL.Gear.Demos/ZL.Gear.ConsoleApp/ZL.Gear.ConsoleApp.csproj --no-build -- \
+  -s ../ZL.Gear.Demos/ZL.Gear.ConsoleApp/Scenarios/Demo_Sampling_Continuous.json
 ```
 
 **IndustryKit 闭环：**
@@ -95,9 +95,9 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
 | ConsoleApp / WinForms / 产线 | Engine + **Drivers** | `.AsInstrumentedHost(deviceService)` 或 `.WithDeviceService(svc)` |
 
 - 设备服务来源：`DriversServiceCollectionExtensions.CreateDeviceService()`，或 DI `AddGearDrivers()`。
-- 范例：`demos/IndustryKit/ZL.Gear.Samples.Industry.Client/Program.cs`（LogicOnly）、`demos/ZL.Gear.ConsoleApp/Program.cs`（Instrumented）。
+- 范例：`demos/IndustryKit/ZL.Gear.Samples.Industry.Client/Program.cs`（LogicOnly）、`../ZL.Gear.Demos/ZL.Gear.ConsoleApp/Program.cs`（Instrumented）。
 
-详见 [docs/144 §六](./docs/144_Engine解耦二次深度审查与落地路线图_2026-09-11.md)。
+详见私有仓 `ZL.Gear.Docs` · `144_Engine解耦二次深度审查与落地路线图_2026-09-11.md`。
 
 ---
 
@@ -345,12 +345,12 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 
 | 踩坑 | 正确做法 |
 |------|----------|
-| 沙箱内 `dotnet build` NuGet 失败或极慢 | 需要网络时申请 **full_network**；或让用户本机跑 `check_release.sh` |
+| 沙箱内 `dotnet build` NuGet 失败或极慢 | 需要网络时申请 **full_network**；或让用户本机跑 `check_release_public.sh` |
 | ~10 分钟 `Build FAILED` 且 **0 Error(s)** | MSBuild 子进程超时；缩小为单 csproj build，必要时清理 MSBuild/dotnet 进程 |
 | `dotnet run ... \| tail -n 5` 显示 exit 0 但 build 失败 | **管道 exit code 来自 tail**；看 dotnet 退出码或日志关键字 `PASS`/`FAILED` |
 | 每次 `dotnet run` 隐式全量编译 | 先 `dotnet build`，再 `--no-build` 跑场景/verify |
 | ConsoleApp 测量场景无硬件失败 | `export ZL_GEAR_FORCE_MOCK=true` |
-| ConsoleApp/IndustryKit FATAL `feature=basic` | 未设 DevMode | `check_release.sh` / `verify.sh` 已导出 `ZL_LICENSE_DEV_*`（**CI 轨**）；商业发版须另轨 `ZL_LICENSE_CERT`（docs/141 §10.5(4)） |
+| ConsoleApp/IndustryKit FATAL `feature=basic` | 未设 DevMode | `check_release_public.sh` / `verify.sh` 已导出 `ZL_GEAR_LICENSE_TEST_MODE`（**CI 轨**） |
 | 场景覆盖误判 | 以为只有 ConsoleApp 4 场景跑 PASS | 第 2 步 `ScenarioDemoLibraryTests` **in-process** 已覆盖 Core Showcase / Timeout Contract 等（docs/141 §10.5(3) 双轨） |
 
 ### 8.2 产线安全（行业 Handler / JSON 配方）

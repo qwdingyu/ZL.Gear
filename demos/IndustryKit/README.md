@@ -73,5 +73,5 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Releas
 
 ## 与 ConsoleApp 关系
 
-- 官方场景库仍在 `demos/ZL.Gear.ConsoleApp/Scenarios/`（含 `Industry_PCBA_*` 等）。  
+- 官方场景库在私有仓 `ZL.Gear.Demos` · `ZL.Gear.ConsoleApp/Scenarios/`（含 `Industry_PCBA_*` 等）。  
 - 本 Kit 是 **可复制的第二宿主模板**（扩展缝 + 客户端验证），不替代主场景库。
