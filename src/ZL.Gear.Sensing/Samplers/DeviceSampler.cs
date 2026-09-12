@@ -69,8 +69,12 @@ namespace ZL.Gear.Sensing.Samplers
             {
                 try
                 {
-                    // 最多等待 5 秒，避免异常卡死
-                    task.Wait(5000);
+                    // 有界等待（5 秒）：同步 Stop 接口下避免无界阻塞；
+                    // 超时不抛异常，由调用方（Dispose）在输出流上处理竞态。
+                    if (!task.Wait(5000))
+                    {
+                        _log("[DeviceSampler] 停止采样超时（5s）：后台循环可能阻塞在设备 I/O，_output 将由 Dispose 关闭。");
+                    }
                 }
                 catch (AggregateException ex)
                 {
@@ -111,9 +115,14 @@ namespace ZL.Gear.Sensing.Samplers
                     }
                 }
                 catch (OperationCanceledException) { break; }
+                catch (ObjectDisposedException) { break; } // _output 已被 Dispose（Stop 超时竞态），停止采样
                 catch (Exception ex)
                 {
-                    _output.OnNext(ZL.Gear.Core.Models.Measurement.Create(Name, null, false, ex.Message));
+                    try
+                    {
+                        _output.OnNext(ZL.Gear.Core.Models.Measurement.Create(Name, null, false, ex.Message));
+                    }
+                    catch (ObjectDisposedException) { break; }
                 }
 
                 if (_interval > TimeSpan.Zero)

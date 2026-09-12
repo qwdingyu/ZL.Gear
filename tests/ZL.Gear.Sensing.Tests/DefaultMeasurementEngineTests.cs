@@ -154,7 +154,9 @@ namespace ZL.Gear.Sensing.Tests
             var engine = new DefaultMeasurementEngine<double>(_ => { });
             var config = new SamplingConfig<double>
             {
-                TotalTimeoutMs = 100,
+                // 超时须显著大于数据流时长（Interval 10ms × 5 = 50ms），
+                // 保证"数据流完成→零样本 Failed"路径确定性触发，避免与超时计时器竞态（TimedOut vs Failed）。
+                TotalTimeoutMs = 1000,
                 Trigger = new ConditionalTrigger<double>(sample => false), // 永远不启动
                 Strategy = new FixedCountStrategy<double>(3)
             };
