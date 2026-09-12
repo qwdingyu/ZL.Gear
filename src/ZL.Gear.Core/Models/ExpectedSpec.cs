@@ -7,8 +7,10 @@ namespace ZL.Gear.Core.Models
     {
         public string Key { get; set; } = "default";
         /// <summary>
-        /// 默认范围判断
-        ///  "range", "equals", "lcl_only", "ucl_only", "string_equals", "contains", "has_value"
+        /// 判定模式（与 <see cref="ZL.Gear.Engine.Evaluation.ResultEvaluator"/> switch 对齐 · 共 16 种）：
+        /// 数值：range, equals, lcl_only, ucl_only, less_lcl, less_ucl, big_lcl, big_ucl；
+        /// 布尔/位：bool, mask, bit_set；
+        /// 字符串：regex, string_equals, contains, not_contains, has_value。
         /// </summary>
         public string Mode { get; set; } = "range";
         /// <summary>
