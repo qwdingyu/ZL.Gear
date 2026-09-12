@@ -63,7 +63,7 @@ dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.cs
 
 ### 2.4 发版门禁与场景验证
 
-**公开轨真值源：`check_release_public.sh`（5 步）**——`public-guard.sh` (G0) → build → Data.Tests → IndustryKit → ExprDialectProof。  
+**公开轨真值源：`check_release_public.sh`（6 步）**——`public-guard.sh` (G0) → build → Data.Tests → IndustryKit verify（7 条）→ ExprDialectProof → dotnet pack（5 NuGet）。  
 **私有全栈**：`../ZL.Gear.Demos/check_release.sh`（先跑公开轨，再 Full + Drivers + ConsoleApp）。
 
 ```bash
@@ -317,7 +317,7 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 
 1. **推荐**：复制 `demos/IndustryKit/ZL.Gear.Extension.Station`，实现 `IGearExtension`，`RegisterHandlerWithAction`
 2. 配方用 DynamicFlow JSON（docs/134–137 新方言）；宿主 `WithExtension(...).WithBuiltInModules(...)`
-3. 用 `samples/IndustryKit` 客户端 `verify` 做 PASS/故意 FAIL/超时闭环
+3. 用 `demos/IndustryKit` 客户端 `verify`（7 条门禁）或 `showcase`（产品演示）
 4. 早期 `ZL.Gear.Ext.Seat`（Exts 私有仓）仅作 PLC 遗产参考，**不要**作为新行业模板拷贝源
 
 **PR 自检（产线相关，详见 §8.2 · docs/140 §六 · docs/141 §九–§十）：**

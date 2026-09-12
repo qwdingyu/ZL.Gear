@@ -84,7 +84,8 @@ ZL.Gear 学 OpenTAP/TestStand 的「形态」（Step 插件 + Plan 数据解耦 
 |----|--------|------|--------|
 | **L-DSL** | `ZL.Gear.Core` | 配方 DTO、变量、表达式、`StepArgsReader`、`IGearExtension` 接口 | 执行循环、驱动实例、UI、顶层 OverallSuccess |
 | **L-Test** | `ZL.Gear.Engine` | 一次跑测会话：租约、步骤树、评测、报告、DynamicFlow 解释 | 具体 VISA/PLC 协议、行业配方语义、合格限值硬编码 |
-| **L-Adapter** | `ZL.Gear.Sensing` + 私有仓 | 测量参考实现、设备驱动、行业 Handler | DSL 内核；禁止死绑进「通用 Workflow」 |
+| **L-Adapter 测量参考** | `ZL.Gear.Sensing`（公开仓） | 采样与信号绑定参考实现 | 行业私有协议、设备驱动 |
+| **L-Adapter 业务/私有** | Drivers / Exts / Demos（私有仓） | 设备驱动、行业 Handler、Demo 宿主 | 不随框架 NuGet 强绑 |
 
 **关键设计决策**：
 - Engine **无** `ZL.Gear.Drivers` 编译引用（Phase 1 解耦已完成）
@@ -114,20 +115,26 @@ dotnet add package ZL.Gear.Engine    # LogicOnly；Instrumented 驱动在私有 
 
 ---
 
-## 教学模板
+## 教学模板（客户开发者从这里开始）
 
-[`demos/IndustryKit/`](demos/IndustryKit/) 是无硬件、无 Drivers 的 LogicOnly 行业扩展示范。
+[`demos/IndustryKit/`](demos/IndustryKit/) 是无硬件、无 Drivers 的 LogicOnly 示范：**5 分钟搞懂 JSON 配方 + 行业扩展怎么接**。
 
 ```bash
-# 验证闭环（含故意 FAIL + 超时契约）
-bash demos/IndustryKit/verify.sh
+# ① 第一次必跑：1 个合格场景 + 步骤树（约 10 秒）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- quickstart
+
+# ② 产品能力橱窗（5 个代表场景）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase
 ```
+
+完整上手路径：[`demos/IndustryKit/GETTING_STARTED.md`](demos/IndustryKit/GETTING_STARTED.md)
 
 **新手必读**：
 - 不要拷贝 `ZL.Gear.Extension.Seat`（私有 libs、现场 Tag 硬编码）
 - 复制 `demos/IndustryKit/`，实现 `IGearExtension` + `RegisterHandlerWithAction`
 - 配方走 DynamicFlow JSON，限值用 `ArgsOnly` + `TryRequire*`
 - 判据在 JSON `Assert`，不在 Handler 内 if 限值
+- `verify` 是 **CI 门禁**（含故意 FAIL），日常学习用 `quickstart` / `showcase`
 
 ---
 
@@ -141,20 +148,9 @@ bash demos/IndustryKit/verify.sh
 
 ---
 
-## 不在本仓的内容
-
-| 组件 | 仓 | 说明 |
-|------|-----|------|
-| `ZL.Gear.Drivers` | `../ZL.Gear.Drivers/` | 私有驱动（HSL、VISA、Mock） |
-| `ZL.Gear.Exts` | `../ZL.Gear.Exts/` | 私有行业包（Seat 等） |
-| `ZL.Gear.Demos` | `../ZL.Gear.Demos/` | 私有 Demo（ConsoleApp 全栈回归） |
-| `ZL.Gear.Docs` | `../ZL.Gear.Docs/` | 私有文档（编号 028–167、商业分析） |
-
----
-
 ## 版本
 
-当前公开轨 **v1.0.1**（MIT）。Instrumented 驱动与 ConsoleApp 场景库在 sibling 私有仓，不在本仓库。
+当前公开轨 **v1.0.1**（MIT）。完整产线功能（Instrumented 驱动、HSL/VISA/Mock、ConsoleApp 全栈场景）位于 **私有仓** `ZL.Gear.Drivers` / `ZL.Gear.Demos`。
 
 ---
 
