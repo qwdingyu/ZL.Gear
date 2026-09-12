@@ -5,7 +5,7 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>ZL.Gear.Abstractions</AssemblyName>
     <RootNamespace>ZL.Gear.Abstractions</RootNamespace>
-    <Description>Gear.NET 抽象层 - 扩展方法与设备类型定义</Description>
+    <Description>Gear.NET abstractions: driver contracts, sensing interfaces, and extension points.</Description>
   </PropertyGroup>
 
   <ItemGroup>

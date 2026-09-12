@@ -5,6 +5,7 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>ZL.Gear.Engine</AssemblyName>
     <RootNamespace>ZL.Gear.Engine</RootNamespace>
+    <Description>Gear.NET orchestration engine: workflow execution, scheduling, and industry kit integration.</Description>
   </PropertyGroup>
 
   <ItemGroup>

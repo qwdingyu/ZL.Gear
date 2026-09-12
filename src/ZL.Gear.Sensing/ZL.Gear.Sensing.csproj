@@ -5,6 +5,7 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>ZL.Gear.Sensing</AssemblyName>
     <RootNamespace>ZL.Gear.Sensing</RootNamespace>
+    <Description>Gear.NET sensing layer: signal binding, polling, and industrial I/O abstractions.</Description>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 

@@ -5,6 +5,7 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>ZL.Gear.Core</AssemblyName>
     <RootNamespace>ZL.Gear.Core</RootNamespace>
+    <Description>Gear.NET core primitives: workflow graph, execution context, and shared types.</Description>
   </PropertyGroup>
 
   <ItemGroup>
