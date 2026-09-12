@@ -39,6 +39,13 @@ namespace ZL.Gear.Core.Infrastructure
         /// <param name="command">命令名称。</param>
         /// <returns>若存在元数据则返回其值，否则返回 null。</returns>
         bool? GetEvaluateResult(string command);
+
+        /// <summary>
+        /// 显式设置命令级 EvaluateResult 元数据（legacy 旁路命令等，Handler 类无法单独标注时使用）。
+        /// </summary>
+        /// <param name="command">命令名称。</param>
+        /// <param name="evaluateResult">false 表示跳过 ResultEvaluator，直接采用 Handler 成败。</param>
+        void SetEvaluateResult(string command, bool evaluateResult);
     }
 
     /// <summary>

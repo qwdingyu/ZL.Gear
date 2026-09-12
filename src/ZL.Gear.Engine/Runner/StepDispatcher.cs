@@ -228,6 +228,8 @@ namespace ZL.Gear.Engine.Runner
             {
                 throw new NotSupportedException("当前 HandlerLookup 实现不支持注册。");
             }
+
+            CacheHandlerMetadata(command, handler);
         }
 
         /// <summary>
@@ -241,30 +243,48 @@ namespace ZL.Gear.Engine.Runner
             RegisterHandler(command, handler, allowOverwrite);
             _actionRegistry.RegisterAction(command, handler.ExecuteAsync,
                 allowOverwrite ? RegistrationPolicy.Overwrite : RegistrationPolicy.ThrowIfExists);
+        }
 
-            // 缓存 Handler 的 StepHandlerCommandAttribute，供启动期/运行时 EvaluateResult 桥接使用
-            var attr = handler.GetType().GetCustomAttribute<StepHandlerCommandAttribute>(true);
-            if (attr != null)
+        /// <inheritdoc />
+        public void SetEvaluateResult(string command, bool evaluateResult)
+        {
+            if (string.IsNullOrWhiteSpace(command))
             {
-                _handlerMetadata[command] = attr;
+                throw new ArgumentException("命令名称不能为空。", nameof(command));
+            }
 
-                // 启动期冲突校验：同名命令参数 schema 不一致
-                if (!string.IsNullOrEmpty(attr.ParameterSchema))
+            var attr = new StepHandlerCommandAttribute(command) { EvaluateResult = evaluateResult };
+            _handlerMetadata[command] = attr;
+        }
+
+        private void CacheHandlerMetadata(string command, IStepHandler handler, bool allowOverwrite = true)
+        {
+            var attr = handler.GetType().GetCustomAttribute<StepHandlerCommandAttribute>(true);
+            if (attr == null)
+            {
+                return;
+            }
+
+            _handlerMetadata[command] = attr;
+
+            if (string.IsNullOrEmpty(attr.ParameterSchema))
+            {
+                return;
+            }
+
+            if (_parameterSchemas.TryGetValue(command, out var existingSchema) && existingSchema != attr.ParameterSchema)
+            {
+                if (allowOverwrite)
                 {
-                    if (_parameterSchemas.TryGetValue(command, out var existingSchema) && existingSchema != attr.ParameterSchema)
-                    {
-                        if (allowOverwrite)
-                        {
-                            _log($"[警告] 命令 '{command}' 参数 schema 被覆盖: '{existingSchema}' -> '{attr.ParameterSchema}'");
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"命令 '{command}' 存在多个不一致的参数 schema 定义: '{existingSchema}' vs '{attr.ParameterSchema}'");
-                        }
-                    }
-                    _parameterSchemas[command] = attr.ParameterSchema;
+                    _log($"[警告] 命令 '{command}' 参数 schema 被覆盖: '{existingSchema}' -> '{attr.ParameterSchema}'");
+                }
+                else
+                {
+                    throw new InvalidOperationException($"命令 '{command}' 存在多个不一致的参数 schema 定义: '{existingSchema}' vs '{attr.ParameterSchema}'");
                 }
             }
+
+            _parameterSchemas[command] = attr.ParameterSchema;
         }
 
         /// <summary>
@@ -422,7 +442,35 @@ namespace ZL.Gear.Engine.Runner
             // 3. 执行并规范化返回类型
             try
             {
-                var rawResult = await handler.ExecuteAsync(step, newContext).ConfigureAwait(false);
+                // P0-1 强制超时（硬边界）：WhenAny 保证引擎在 TimeoutMs 内按时返回。
+                // 协作式取消仍通过 linkedCts.Token 传递给 Handler；
+                // 不合作 Handler（忽略 token、阻塞在原生 I/O）由 timeoutTcs 兜底，其延迟结果被隔离丢弃。
+                var handlerTask = handler.ExecuteAsync(step, newContext);
+                var timeoutTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (stepTimeoutCts.Token.Register(() => timeoutTcs.TrySetResult(true)))
+                {
+                    var completed = await Task.WhenAny(handlerTask, timeoutTcs.Task).ConfigureAwait(false);
+
+                    if (completed == timeoutTcs.Task)
+                    {
+                        _log($"[Timeout] 步骤 '{step.StepName}' 执行超时 ({timeoutMs}ms), TimeoutAction={timeoutAction}。Handler 未在时限内返回，其延迟结果将被隔离丢弃。");
+                        ObserveLateTask(handlerTask);
+                        if (string.Equals(timeoutAction, "Continue", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Continue：不中断序列的意图由执行器结合 StopByFail 理解；
+                            // 此处必须返回 Failed，避免 EvaluateResult=false / Execute 把空测量当成 PASS（防漏检）。
+                            return ExecutionResult<List<Measurement>>.Failed(
+                                $"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)",
+                                new List<Measurement>());
+                        }
+
+                        return ExecutionResult<List<Measurement>>.Failed(
+                            $"步骤执行超时 ({timeoutMs}ms)",
+                            new List<Measurement>());
+                    }
+                }
+
+                var rawResult = await handlerTask.ConfigureAwait(false);
                 _log($"[DispatchCoreAsync] step={step.StepName}, command={step.Command}, handler={handler.GetType().FullName}, success={rawResult.Success}, message={rawResult.Message}");
 
                 // 已经是列表结果，直接返回
