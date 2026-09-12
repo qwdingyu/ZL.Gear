@@ -2,7 +2,7 @@
 
 .NET 工业自动化微编排框架（Core / Engine / Sensing / Abstractions / Extensions.Data）。
 
-**许可证**：MIT（公开轨）
+**许可证**：MIT（见 [`LICENSE`](LICENSE)）。LogicOnly 公开轨无 Engine 授权门禁；Instrumented 授权在私有 `ZL.Gear.Drivers`。
 
 ## 快速开始
 

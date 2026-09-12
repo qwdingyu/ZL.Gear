@@ -12,7 +12,7 @@
 | `check_release_public.sh` | 公开轨质量门（不含 Drivers/Demos） |
 | `demos/IndustryKit/` | MIT 教学模板（仅引 Core/Engine） |
 | `tools/ExprDialectProof` | 表达式方言门禁 |
-| `tests/LicenseEnvTest` | 授权环境测试（待 PR-A 后评估迁私有仓） |
+| `LICENSE` | MIT（公开轨 G0-8） |
 
 ## 本仓不包含（ sibling 私有仓）
 
@@ -28,13 +28,26 @@
 已执行 `git filter-repo`（清单见 `.filter-repo-paths-to-remove.txt`）。  
 历史 blob 中 **0** 条 Drivers/HSL/私有路径命中。本地 `.git/filter-repo/` 导出缓存已删除。
 
-## 公开 push 前门禁（G0-6 摘要）
+## 公开轨门禁（docs/163 G0 摘要）
 
 ```bash
+# G0-1：Engine 无授权门禁
+! rg LicenseGuard src/ZL.Gear.Engine
+! rg 'ZL\.License' src/ZL.Gear.Engine/*.csproj
+
+# G0-4：IndustryKit 零 bypass（无 ZL_LICENSE_* / ZL_GEAR_LICENSE_*）
+env -i PATH="$PATH" HOME="$HOME" bash demos/IndustryKit/verify.sh
+
+# G0-6：无 Drivers/HSL
 ! rg -l HslCommunication --glob '*.csproj' .
 ! rg -l 'ZL\.Gear\.Drivers' --glob '*.csproj' .
 test ! -d ZL.Gear.Drivers
+
+# G0-5
+bash check_release_public.sh
 ```
+
+**商业授权门禁**在 sibling 私有仓 `ZL.Gear.Drivers`（Instrumented 路径），不在本公开 Engine。
 
 ## 本地全栈联调
 

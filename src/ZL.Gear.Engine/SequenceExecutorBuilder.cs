@@ -288,10 +288,6 @@ namespace ZL.Gear.Engine
             _logger ??= msg => Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {msg}");
             _logger?.Invoke("[SequenceExecutorBuilder] 开始构建 SequenceExecutor...");
 
-            // 授权检查：在构建执行器时进行全局校验
-            // 消费方即使自写宿主，只要调用 Build() 就会触发授权检查
-            LicenseGuard.EnsureAuthorized();
-
             if (_deviceHostMode == DeviceHostMode.Unspecified)
             {
                 throw new InvalidOperationException("未声明宿主：请先调用 AsLogicOnlyDemoHost() 或 AsInstrumentedHost(svc)。");

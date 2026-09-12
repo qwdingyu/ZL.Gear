@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-export ZL_GEAR_LICENSE_TEST_MODE="${ZL_GEAR_LICENSE_TEST_MODE:-true}"
-
 echo "===================================================="
 echo "ZL.Gear 公开轨质量门"
 echo "===================================================="

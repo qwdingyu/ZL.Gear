@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # IndustryKit 闭环验证门禁
-# CI/Dev 授权：与 check_release_public.sh / TestSetup 一致
+# 公开轨：LogicOnly 无授权 bypass（G0-4 · docs/163 PR-3）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-
-# Release 构建下 LicenseConfig 强制 DevMode=false；CI/verify 轨与 TestSetup 一致绕过 LicenseGuard
-export ZL_GEAR_LICENSE_TEST_MODE="${ZL_GEAR_LICENSE_TEST_MODE:-true}"
 
 echo "[IndustryKit] build..."
 dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj -c Release -v q

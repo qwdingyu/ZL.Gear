@@ -350,7 +350,8 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 | `dotnet run ... \| tail -n 5` 显示 exit 0 但 build 失败 | **管道 exit code 来自 tail**；看 dotnet 退出码或日志关键字 `PASS`/`FAILED` |
 | 每次 `dotnet run` 隐式全量编译 | 先 `dotnet build`，再 `--no-build` 跑场景/verify |
 | ConsoleApp 测量场景无硬件失败 | `export ZL_GEAR_FORCE_MOCK=true` |
-| ConsoleApp/IndustryKit FATAL `feature=basic` | 未设 DevMode | `check_release_public.sh` / `verify.sh` 已导出 `ZL_GEAR_LICENSE_TEST_MODE`（**CI 轨**） |
+| ConsoleApp FATAL `feature=basic` | Drivers 未授权 | 公开 Engine 无 LicenseGuard；Instrumented 路径在 **ZL.Gear.Drivers** 配置 `ZL_LICENSE_*` |
+| IndustryKit 不应再遇授权错误 | 公开轨已去 Engine 门禁 | `verify.sh` **零 bypass**；LogicOnly 直接 PASS |
 | 场景覆盖误判 | 以为只有 ConsoleApp 4 场景跑 PASS | 第 2 步 `ScenarioDemoLibraryTests` **in-process** 已覆盖 Core Showcase / Timeout Contract 等（docs/141 §10.5(3) 双轨） |
 
 ### 8.2 产线安全（行业 Handler / JSON 配方）
