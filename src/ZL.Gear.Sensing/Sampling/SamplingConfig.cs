@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Threading;
 using ZL.Gear.Sensing.Dto;
 
 namespace ZL.Gear.Sensing
@@ -15,9 +16,11 @@ namespace ZL.Gear.Sensing
         public ISamplingStrategy<T> Strategy { get; set; }
         public IExecutionTrigger<T> Trigger { get; set; }
         public int SampleIntervalMs { get; set; }
+        public Func<int> DynamicIntervalProvider { get; set; }
         public int TotalTimeoutMs { get; set; }
         public int ActiveDurationMs { get; set; }
-        
+        public bool SaveAllSamples { get; set; } = true;
+
         public Func<T, bool> SpecChecker { get; set; }
         public Func<T, bool> PerSampleValidator { get; set; }
         public Action<T> OnTestStarted { get; set; }
@@ -65,12 +68,17 @@ namespace ZL.Gear.Sensing
                 throw new InvalidOperationException($"[{stepName}] 配置错误: 采样间隔 (SampleIntervalMs) 必须大于 0。");
             LogParameter(logBuilder, "采样间隔 (SampleIntervalMs)", SampleIntervalMs, "ms", DEFAULT_INTERVAL_MS);
 
-            if (TotalTimeoutMs <= 0)
-                throw new InvalidOperationException($"[{stepName}] 配置错误: 总超时 (TotalTimeoutMs) 必须大于 0。");
-            LogParameter(logBuilder, "总超时 (TotalTimeoutMs)", TotalTimeoutMs, "ms", DEFAULT_TOTAL_TIMEOUT_MS);
+            if (TotalTimeoutMs != Timeout.Infinite && TotalTimeoutMs <= 0)
+                throw new InvalidOperationException($"[{stepName}] 配置错误: 总超时 (TotalTimeoutMs) 必须大于 0 或为 Infinite。");
 
-            if (TotalTimeoutMs <= SampleIntervalMs)
+            string timeoutStr = TotalTimeoutMs == Timeout.Infinite ? "Infinite (手动模式)" : $"{TotalTimeoutMs}ms";
+            logBuilder.AppendLine($" - 总超时 (TotalTimeoutMs): {timeoutStr}");
+
+            if (TotalTimeoutMs != Timeout.Infinite && TotalTimeoutMs <= SampleIntervalMs)
                 throw new InvalidOperationException($"[{stepName}] 配置错误: 总超时({TotalTimeoutMs}ms) 必须大于采样间隔({SampleIntervalMs}ms)。");
+
+            logBuilder.AppendLine($" - 动态参数调整 (DynamicInterval): {(DynamicIntervalProvider == null ? "禁用" : "启用")}");
+            logBuilder.AppendLine($" - 内存流式保护 (SaveAllSamples): {SaveAllSamples}");
 
             // 3. 策略特定验证 (DurationStrategy 的时长是在策略内部，构造时已验证)
             // 此处可以添加更多未来策略的特定验证逻辑

@@ -198,6 +198,9 @@ namespace ZL.Gear.Sensing
         public abstract (bool isDone, bool shouldCollect) ProcessSample(T sample, IReadOnlyList<T> collectedSamples);
 
         public T CalculateResult(IReadOnlyList<T> samples) => ResultCalculator.Calculate(samples);
+
+        /// <summary>供 MeasurementKit 手动模式保留原策略计算器。</summary>
+        public IResultCalculator<T> GetCalculator() => ResultCalculator;
     }
 
 
@@ -245,26 +248,46 @@ namespace ZL.Gear.Sensing
     /// <summary>
     /// 【已修改】时长策略：在测试激活后，持续采样直到达到指定时长。
     /// </summary>
+    /// <summary>
+    /// 时长策略；支持 TimeSpan.Zero 或负值（如 -1ms）表示无限/手动模式。
+    /// </summary>
     public class DurationStrategy<T> : SamplingStrategyBase<T>
     {
         private readonly TimeSpan _duration;
         private DateTime? _startTime;
-        public double DurationMs { get { return _duration.TotalMilliseconds; } }
-        public override string StrategyName => $"时长({_duration.TotalSeconds:F1}s, 计算:{ResultCalculator.Name})";
+        private readonly bool _isInfinite;
+
+        public double DurationMs => _duration.TotalMilliseconds;
+
+        public override string StrategyName => _isInfinite
+            ? $"时长(无限/手动, 计算:{ResultCalculator.Name})"
+            : $"时长({_duration.TotalSeconds:F1}s, 计算:{ResultCalculator.Name})";
 
         public DurationStrategy(TimeSpan duration, IResultCalculator<T> resultCalculator = null)
-            : base(resultCalculator) // 将 resultCalculator 传递给基类
+            : base(resultCalculator)
         {
             if (duration.TotalMilliseconds <= 0)
-                throw new ArgumentOutOfRangeException(nameof(duration), "时长必须为正。");
-            _duration = duration;
+            {
+                _isInfinite = true;
+                _duration = TimeSpan.MaxValue;
+            }
+            else
+            {
+                _isInfinite = false;
+                _duration = duration;
+            }
         }
 
         public override (bool isDone, bool shouldCollect) ProcessSample(T sample, IReadOnlyList<T> collectedSamples)
         {
+            if (_isInfinite)
+            {
+                return (false, true);
+            }
+
             _startTime ??= DateTime.UtcNow;
             bool isDone = (DateTime.UtcNow - _startTime.Value) >= _duration;
-            return (isDone, !isDone); // 当未完成时收集样本
+            return (isDone, !isDone);
         }
     }
 }

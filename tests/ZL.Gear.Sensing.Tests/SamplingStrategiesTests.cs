@@ -46,9 +46,29 @@ namespace ZL.Gear.Sensing.Tests
         }
 
         [Test]
-        public void DurationStrategy_duration为0_抛出异常()
+        public void DurationStrategy_时长为0_应视为无限模式不抛异常()
         {
-            Assert.Throws<ArgumentOutOfRangeException>(() => new DurationStrategy<double>(TimeSpan.Zero));
+            DurationStrategy<double> strategy = null;
+            Assert.DoesNotThrow(() => strategy = new DurationStrategy<double>(TimeSpan.Zero));
+            Assert.That(strategy.StrategyName, Does.Contain("无限"));
+
+            var samples = new List<double>();
+            (bool isDone, bool shouldCollect) = strategy.ProcessSample(1.0, samples);
+            Assert.IsFalse(isDone, "无限模式不应自行完成");
+            Assert.IsTrue(shouldCollect, "无限模式应持续采集样本");
+        }
+
+        [Test]
+        public void DurationStrategy_时长为负_应视为无限模式供手动模式使用()
+        {
+            // 锚点：MeasurementKit 手动模式以 -1ms 构造无限采样（src/ZL.Gear.Sensing/Measurement/MeasurementKit.cs）
+            var strategy = new DurationStrategy<double>(TimeSpan.FromMilliseconds(-1));
+            Assert.That(strategy.StrategyName, Does.Contain("无限"));
+
+            var samples = new List<double>();
+            (bool isDone, bool shouldCollect) = strategy.ProcessSample(2.0, samples);
+            Assert.IsFalse(isDone);
+            Assert.IsTrue(shouldCollect);
         }
 
         [Test]
