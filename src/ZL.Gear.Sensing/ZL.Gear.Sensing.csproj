@@ -7,6 +7,7 @@
     <RootNamespace>ZL.Gear.Sensing</RootNamespace>
     <Description>Gear.NET sensing layer: signal binding, polling, and industrial I/O abstractions.</Description>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);CS8632;CS0067;CS0168;CS0162;CA2200</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

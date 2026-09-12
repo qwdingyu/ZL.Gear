@@ -6,6 +6,7 @@
     <AssemblyName>ZL.Gear.Abstractions</AssemblyName>
     <RootNamespace>ZL.Gear.Abstractions</RootNamespace>
     <Description>Gear.NET abstractions: driver contracts, sensing interfaces, and extension points.</Description>
+    <NoWarn>$(NoWarn);CS8632;CS0067;CS0168;CS0162;CA2200</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
