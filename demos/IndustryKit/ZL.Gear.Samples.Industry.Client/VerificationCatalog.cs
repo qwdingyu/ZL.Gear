@@ -42,23 +42,45 @@ namespace ZL.Gear.Samples.Industry.Client
         /// <summary>全部用例（顺序：先正后负，便于日志阅读）。</summary>
         public static IReadOnlyList<VerificationCase> All { get; } = new[]
         {
+            // 框架 DSL 橱窗（无行业 ActionKey）
+            new VerificationCase(
+                "gear-core-showcase",
+                "Gear_Core_Showcase.json",
+                expectSuccess: true,
+                summaryContains: "Gear 框架内核"),
+
             // 扩展 ActionKey + Calculate + Assert L1 + Finally + MarkComplete 全链路
             new VerificationCase(
                 "happy-path",
                 "Station_HappyPath.json",
                 expectSuccess: true),
 
-            // SimulatedOhm &gt; LimitOhm → Margin≤0 → Assert Failed → OverallSuccess 必须为 false（防漏检）
+            // Args 覆盖 Variables 仿真值
+            new VerificationCase(
+                "probe-override",
+                "Station_ProbeOverride.json",
+                expectSuccess: true),
+
+            // 行业 + Parallel/WaitUntil/Retry 一体化
+            new VerificationCase(
+                "integrated-ate",
+                "Station_Integrated_Ate.json",
+                expectSuccess: true,
+                summaryContains: "一体化 ATE"),
+
+            // SimulatedOhm > LimitOhm → Margin≤0 → Assert Failed → OverallSuccess 必须为 false（防漏检）
             new VerificationCase(
                 "assert-fail",
                 "Station_AssertFail.json",
-                expectSuccess: false),
+                expectSuccess: false,
+                summaryContains: "电阻裕量"),
 
-            // WorkflowTimeoutMs &lt; DelayMs → 流程级超时失败（对齐 Demo_Timeout_Contract，防超时误 PASS）
+            // WorkflowTimeoutMs < DelayMs → 流程级超时失败（对齐 Demo_Timeout_Contract，防超时误 PASS）
             new VerificationCase(
                 "timeout-contract",
                 "Station_TimeoutContract.json",
-                expectSuccess: false),
+                expectSuccess: false,
+                summaryContains: "MicroWorkflow 流程级超时"),
 
             // 换行业先改 JSON：同一扩展 DLL，不同 RecipeId/限值（安全带叙事分叉）
             new VerificationCase(

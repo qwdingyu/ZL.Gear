@@ -22,6 +22,11 @@
       "Sequence": [
         {
           "Type": "Action",
+          "Description": "工位启动（故意不合格路径）",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Action",
           "Description": "应用超限配方",
           "ActionKey": "Industry.Station.ApplyRecipe",
           "Args": {

@@ -1,0 +1,126 @@
+{
+  "StepKey": "Station_Integrated_Ate",
+  "StepName": "【IndustryKit】行业 + 控制流一体化 ATE",
+  "Description": "Parallel 准备 → ApplyRecipe(置 ChannelReady) → WaitUntil → Probe → Calculate → 双 Assert → MarkComplete。展示 L-Test 编排 + L-Adapter 扩展同屏。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 60000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 30000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 30000,
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "工位清理",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Integrated ATE cleanup Recipe=${RecipeId} Done=${StationDone}" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "一体化 ATE 启动",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Parallel",
+          "Description": "并行准备（非测量支路）",
+          "Children": [
+            {
+              "Type": "Action",
+              "Description": "MES 心跳",
+              "ActionKey": "Log",
+              "Args": { "Message": "[Prep] MES heartbeat OK" }
+            },
+            {
+              "Type": "Action",
+              "Description": "治具自检",
+              "ActionKey": "Log",
+              "Args": { "Message": "[Prep] Fixture self-check OK" }
+            }
+          ]
+        },
+        {
+          "Type": "Action",
+          "Description": "下发配方（含 ChannelReady=true）",
+          "ActionKey": "Industry.Station.ApplyRecipe",
+          "Args": {
+            "RecipeId": "STATION-INTEGRATED-ATE",
+            "ChannelId": "CH-MAIN",
+            "LimitOhm": 4.0,
+            "SimulatedOhm": 1.8
+          }
+        },
+        {
+          "Type": "Group",
+          "Description": "测量前等待通道就绪",
+          "Children": [
+            {
+              "Type": "WaitUntil",
+              "Description": "轮询 ChannelReady（ApplyRecipe SetShared）",
+              "Condition": "ChannelReady",
+              "TimeoutMs": 3000,
+              "IntervalMs": 50
+            },
+            {
+              "Type": "Action",
+              "Description": "通道探测",
+              "ActionKey": "Industry.Station.ProbeChannel"
+            }
+          ]
+        },
+        {
+          "Type": "Retry",
+          "Description": "探测后确认探针",
+          "ActionKey": "Log",
+          "RetryCount": 2,
+          "IntervalMs": 30,
+          "Args": { "Message": "[Retry] Post-probe ack" }
+        },
+        {
+          "Type": "Action",
+          "Description": "计算裕量",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1：裕量为正",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "Margin > 0",
+            "Message": "裕量不足"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1：实测低于上限",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "MeasuredOhm < LimitOhm",
+            "Message": "实测超限"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "工位收尾",
+          "ActionKey": "Industry.Station.MarkComplete"
+        },
+        {
+          "Type": "Action",
+          "Description": "汇总",
+          "ActionKey": "Log",
+          "Args": {
+            "Message": ">>> Integrated ATE PASS Recipe=${RecipeId} Margin=${Margin}"
+          }
+        }
+      ]
+    }
+  }
+}

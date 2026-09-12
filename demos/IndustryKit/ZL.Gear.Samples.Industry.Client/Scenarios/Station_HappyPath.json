@@ -11,9 +11,6 @@
     "WorkflowTimeoutMs": 15000,
     "WorkflowDefinition": {
       "WorkflowTimeoutMs": 15000,
-      "Variables": {
-        "Ready": false
-      },
       "Finalizers": [
         {
           "Type": "Action",

@@ -1,0 +1,80 @@
+{
+  "StepKey": "Station_ProbeOverride",
+  "StepName": "【IndustryKit】ProbeChannel Args 覆盖仿真值",
+  "Description": "ApplyRecipe 注入 SimulatedOhm=2.0；ProbeChannel Args.MeasuredOhm=1.5 必须生效（fail-closed 覆盖语义）。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 30000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 15000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 15000,
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "清理",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] ProbeOverride cleanup Measured=${MeasuredOhm}" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "工位启动",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Action",
+          "Description": "应用配方（SimulatedOhm=2.0）",
+          "ActionKey": "Industry.Station.ApplyRecipe",
+          "Args": {
+            "RecipeId": "STATION-OVERRIDE-DEMO",
+            "ChannelId": "CH-OVERRIDE",
+            "LimitOhm": 5.0,
+            "SimulatedOhm": 2.0
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "显式覆盖测量值（模拟现场仪表读数）",
+          "ActionKey": "Industry.Station.ProbeChannel",
+          "Args": { "MeasuredOhm": 1.5 }
+        },
+        {
+          "Type": "Action",
+          "Description": "计算裕量（须基于 1.5 而非 2.0）",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "覆盖值校验：MeasuredOhm 应为 1.5",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "MeasuredOhm == 1.5",
+            "Message": "Args 覆盖未生效"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "裕量校验",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "Margin == 3.5",
+            "Message": "裕量计算错误（应基于覆盖值 1.5）"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "工位收尾",
+          "ActionKey": "Industry.Station.MarkComplete"
+        }
+      ]
+    }
+  }
+}

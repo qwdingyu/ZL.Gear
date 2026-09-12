@@ -5,6 +5,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+SCEN_DIR="demos/IndustryKit/ZL.Gear.Samples.Industry.Client/Scenarios"
+for json in Gear_Core_Showcase.json Station_HappyPath.json Station_ProbeOverride.json \
+  Station_Integrated_Ate.json Station_AssertFail.json Station_TimeoutContract.json Fork_Seatbelt_Like.json; do
+  if [ ! -f "$SCEN_DIR/$json" ]; then
+    echo "❌ 缺少 verify 场景: $SCEN_DIR/$json" >&2
+    exit 3
+  fi
+done
+
 echo "[IndustryKit] build..."
 dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj -c Release -v q
 

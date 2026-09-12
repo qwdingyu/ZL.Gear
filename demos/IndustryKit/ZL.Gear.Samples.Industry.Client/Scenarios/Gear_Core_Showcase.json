@@ -1,0 +1,167 @@
+{
+  "StepKey": "Gear_Core_Showcase",
+  "StepName": "【IndustryKit】Gear 框架内核橱窗（无行业 Handler）",
+  "Description": "L-DSL 一站演示：Calculate 裸标识符；Assert L1+L0；Parallel/Group/Sequence/Retry/Delay/WaitUntil/Finalizers/${插值}。",
+  "Command": "DynamicFlow",
+  "EvaluateResult": false,
+  "TimeoutMs": 60000,
+  "StopByFail": true,
+  "Enable": true,
+  "Parameters": {
+    "WorkflowTimeoutMs": 30000,
+    "WorkflowDefinition": {
+      "WorkflowTimeoutMs": 30000,
+      "Variables": {
+        "LimitOhm": 5.0,
+        "Ready": false,
+        "MaxLeakage": 5.0
+      },
+      "Finalizers": [
+        {
+          "Type": "Action",
+          "Description": "最终清理（无论成败）",
+          "ActionKey": "Log",
+          "Args": { "Message": "[Finally] Gear Core Showcase cleanup" }
+        }
+      ],
+      "Sequence": [
+        {
+          "Type": "Action",
+          "Description": "橱窗启动",
+          "ActionKey": "Log.Info"
+        },
+        {
+          "Type": "Action",
+          "Description": "注入模拟测量值",
+          "ActionKey": "SetVariable",
+          "Args": { "Key": "MeasuredOhm", "Value": 2.5 }
+        },
+        {
+          "Type": "Action",
+          "Description": "计算裕量（裸标识符）",
+          "ActionKey": "Calculate",
+          "Args": {
+            "Expression": "LimitOhm - MeasuredOhm",
+            "OutputKey": "Margin"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "Inputs@ 映射到节点作用域",
+          "ActionKey": "Log",
+          "Inputs": { "Note": "@LimitOhm" },
+          "Args": { "Message": "[Inputs] Limit=${Note}" }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1 Check：裕量为正",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "Margin > 0",
+            "Message": "电阻裕量不足"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "注入泄漏电流模拟值",
+          "ActionKey": "SetVariable",
+          "Args": { "Key": "LeakageMa", "Value": 3.0 }
+        },
+        {
+          "Type": "Action",
+          "Description": "L1 Check：泄漏上限",
+          "ActionKey": "Assert",
+          "Args": {
+            "Check": "LeakageMa <= MaxLeakage",
+            "Message": "泄漏超限"
+          }
+        },
+        {
+          "Type": "Action",
+          "Description": "L0 对照：Left/Op/Right",
+          "ActionKey": "Assert",
+          "Args": {
+            "Left": "Margin",
+            "Op": "Gte",
+            "Right": 0,
+            "Message": "L0 裕量检查失败"
+          }
+        },
+        {
+          "Type": "Retry",
+          "Description": "瞬时探针可重试",
+          "ActionKey": "Log",
+          "RetryCount": 2,
+          "IntervalMs": 20,
+          "Args": { "Message": "[Retry] 探针 OK" }
+        },
+        {
+          "Type": "Parallel",
+          "Description": "步内并行动作",
+          "Children": [
+            {
+              "Type": "Action",
+              "Description": "支路 A",
+              "ActionKey": "Log",
+              "Args": { "Message": "Parallel-A" }
+            },
+            {
+              "Type": "Action",
+              "Description": "支路 B",
+              "ActionKey": "Log",
+              "Args": { "Message": "Parallel-B" }
+            }
+          ]
+        },
+        {
+          "Type": "Group",
+          "Description": "视觉分组（运行时≡Sequence）",
+          "Children": [
+            {
+              "Type": "Action",
+              "Description": "标记 Ready",
+              "ActionKey": "SetVariable",
+              "Args": { "Key": "Ready", "Value": true }
+            },
+            {
+              "Type": "WaitUntil",
+              "Description": "轮询变量到位",
+              "Condition": "Ready",
+              "TimeoutMs": 2000,
+              "IntervalMs": 50
+            }
+          ]
+        },
+        {
+          "Type": "Delay",
+          "Description": "Type=Delay",
+          "DelayMs": 30
+        },
+        {
+          "Type": "Action",
+          "Description": "System.Delay 同源",
+          "ActionKey": "System.Delay",
+          "Args": { "DelayMs": 20 }
+        },
+        {
+          "Type": "Sequence",
+          "Description": "显式 Sequence 容器",
+          "Children": [
+            {
+              "Type": "Action",
+              "Description": "Sequence 内日志",
+              "ActionKey": "Log",
+              "Args": { "Message": "[Sequence] nested OK" }
+            }
+          ]
+        },
+        {
+          "Type": "Action",
+          "Description": "橱窗完成",
+          "ActionKey": "Log",
+          "Args": { "Message": ">>> Gear Core Showcase PASS Margin=${Margin} Leak=${LeakageMa}" }
+        }
+      ]
+    }
+  }
+}
