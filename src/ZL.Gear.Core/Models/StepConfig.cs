@@ -71,6 +71,21 @@ namespace ZL.Gear.Core.Models
         public Dictionary<string, object> Parameters { get; set; } = new();
 
         /// <summary>
+        /// legacy JSON 顶层 CustomerParam → Parameters 桥（G1b-10 · 无公开属性）。
+        /// </summary>
+        [JsonProperty("CustomerParam")]
+        private object CustomerParamLegacyJson
+        {
+            set
+            {
+                if (value == null) return;
+                Parameters ??= new Dictionary<string, object>();
+                if (!Parameters.ContainsKey("CustomerParam"))
+                    Parameters["CustomerParam"] = value;
+            }
+        }
+
+        /// <summary>
         /// 期望结果规范列表
         /// </summary>
         public List<ExpectedSpec> ExpectedResults { get; set; } = new List<ExpectedSpec>();
@@ -320,5 +335,8 @@ namespace ZL.Gear.Core.Models
 
             return clone;
         }
+
+        /// <summary>legacy 座椅 Handler 兼容别名。</summary>
+        public StepConfig DeepClone() => (StepConfig)Clone();
     }
 }

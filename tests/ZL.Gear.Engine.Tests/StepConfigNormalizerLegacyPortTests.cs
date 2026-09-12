@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using NUnit.Framework;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Engine.Runner;
@@ -150,6 +151,26 @@ namespace ZL.Gear.Engine.Tests
 
             Assert.That(step.ExpectedResults, Is.Not.Null.And.Not.Empty);
             Assert.IsNull(step.ExpectedResults![0].UCL);
+        }
+
+        [Test]
+        [Category("LegacyNormalizerPort")]
+        public void Deserialize_顶层CustomerParam_写入Parameters()
+        {
+            var step = JsonConvert.DeserializeObject<StepConfig>(
+                "{\"StepKey\":\"sbr\",\"CustomerParam\":\"680|830,750|900\"}");
+
+            Assert.That(step!.Parameters["CustomerParam"], Is.EqualTo("680|830,750|900"));
+        }
+
+        [Test]
+        [Category("LegacyNormalizerPort")]
+        public void Deserialize_Parameters内CustomerParam_优先于顶层()
+        {
+            var step = JsonConvert.DeserializeObject<StepConfig>(
+                "{\"StepKey\":\"s1\",\"CustomerParam\":\"old\",\"Parameters\":{\"CustomerParam\":\"new\"}}");
+
+            Assert.That(step!.Parameters["CustomerParam"], Is.EqualTo("new"));
         }
 
         #endregion
