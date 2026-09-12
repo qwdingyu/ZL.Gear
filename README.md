@@ -1,0 +1,20 @@
+# ZL.Gear
+
+.NET 工业自动化微编排框架（Core / Engine / Sensing / Abstractions / Extensions.Data）。
+
+**许可证**：MIT（公开轨）
+
+## 快速开始
+
+```bash
+dotnet build ZL.Gear.sln
+bash check_release_public.sh
+```
+
+## 范围
+
+本仓库仅含 MIT 公开轨。行业驱动、ConsoleApp、内部文档位于 sibling 私有仓；边界见 [`REPO_BOUNDARY.md`](REPO_BOUNDARY.md)。
+
+## 教学模板
+
+[`demos/IndustryKit/`](demos/IndustryKit/) — 无硬件、无 Drivers 的 LogicOnly 行业扩展示范。
