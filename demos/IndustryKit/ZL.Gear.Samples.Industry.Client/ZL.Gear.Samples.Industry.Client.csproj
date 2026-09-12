@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\ZL.Gear.Core\ZL.Gear.Core.csproj" />
     <ProjectReference Include="..\..\..\src\ZL.Gear.Engine\ZL.Gear.Engine.csproj" />
     <ProjectReference Include="..\ZL.Gear.Extension.Station\ZL.Gear.Extension.Station.csproj" />
   </ItemGroup>

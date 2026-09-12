@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using ZL.Gear.Core.Infrastructure;
+using ZL.Gear.Core.Runner;
+using ZL.Gear.Core.StepHandler;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine;
 using ZL.Gear.Extension.Station;
@@ -20,6 +22,7 @@ namespace ZL.Gear.Samples.Industry.Client
     /// <code>
     /// dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- verify
     /// dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- run Station_HappyPath
+    /// dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -- --verbose verify
     /// </code>
     /// </remarks>
     public static class Program
@@ -30,24 +33,35 @@ namespace ZL.Gear.Samples.Industry.Client
         /// <summary>入口。</summary>
         public static async Task<int> Main(string[] args)
         {
-            var command = args.Length > 0 ? args[0].Trim().ToLowerInvariant() : "verify";
+            var verbose = args.Any(a => string.Equals(a, "--verbose", StringComparison.OrdinalIgnoreCase));
+            var report = args.Any(a => string.Equals(a, "--report", StringComparison.OrdinalIgnoreCase));
+            var commandArgs = args
+                .Where(a => !string.Equals(a, "--verbose", StringComparison.OrdinalIgnoreCase)
+                             && !string.Equals(a, "--report", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            var command = commandArgs.Length > 0 ? commandArgs[0].Trim().ToLowerInvariant() : "welcome";
             var scenariosDir = ResolveScenariosDir();
 
             Console.WriteLine("====================================================");
-            Console.WriteLine(" ZL.Gear IndustryKit Client（最新架构行业模板）");
+            Console.WriteLine(" ZL.Gear IndustryKit — 行业扩展 + JSON 配方 Demo");
             Console.WriteLine("====================================================");
             Console.WriteLine($"场景目录: {scenariosDir}");
-            Console.WriteLine($"内置模块: BuiltInModules.Core（无 Sensing/PLC/AI，示范最小组合）");
-            Console.WriteLine($"扩展: {new StationExtension().Name}");
+            Console.WriteLine($"扩展插件: {new StationExtension().Name}（电阻工位样板 · 可替换为你的行业）");
+            Console.WriteLine($"运行模式: LogicOnly（无仪器驱动 · 适合学习与集成验证）");
             Console.WriteLine();
 
             try
             {
                 return command switch
                 {
+                    "welcome" => PrintWelcome(),
+                    "quickstart" or "start" => await QuickstartAsync(scenariosDir),
                     "list" => ListScenarios(scenariosDir),
-                    "run" => await RunOneAsync(scenariosDir, args.Skip(1).FirstOrDefault()),
-                    "verify" => await VerifyAllAsync(scenariosDir),
+                    "capabilities" or "caps" => PrintCapabilities(),
+                    "showcase" or "demo" => await ShowcaseAsync(scenariosDir, verbose || report),
+                    "run" => await RunOneAsync(scenariosDir, commandArgs.Skip(1).FirstOrDefault(), verbose, report),
+                    "verify" => await VerifyAllAsync(scenariosDir, verbose),
                     "help" or "-h" or "--help" => PrintHelp(),
                     _ => await UnknownAsync(command)
                 };
@@ -55,18 +69,116 @@ namespace ZL.Gear.Samples.Industry.Client
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[FATAL] {ex.Message}");
+                if (verbose)
+                {
+                    Console.Error.WriteLine(ex);
+                }
+
                 return 99;
             }
         }
 
+        private static int PrintWelcome()
+        {
+            OnboardingGuide.PrintWelcome();
+            Console.WriteLine("命令一览：help");
+            return 0;
+        }
+
         private static int PrintHelp()
         {
+            OnboardingGuide.PrintWelcome();
             Console.WriteLine("命令:");
-            Console.WriteLine("  verify              跑全部验证用例（默认），期望结果全对则 exit 0");
-            Console.WriteLine("  run <场景名|路径>   单场景执行并打印 OverallSuccess");
+            Console.WriteLine("  quickstart | start  ★ 第一次必跑：1 个合格场景 + 步骤树");
+            Console.WriteLine("  showcase | demo     产品能力橱窗（5 个代表场景）");
+            Console.WriteLine("  capabilities | caps 能力 ↔ 场景对照表");
+            Console.WriteLine("  run <场景名|路径>   单场景执行（建议加 --report 看步骤树）");
             Console.WriteLine("  list                列出 Scenarios/*.json");
+            Console.WriteLine("  verify              CI 门禁（7 条，含故意 FAIL · 非日常演示）");
+            Console.WriteLine("  welcome             本说明（无参数默认）");
             Console.WriteLine("  help                本帮助");
+            Console.WriteLine();
+            Console.WriteLine("全局选项:");
+            Console.WriteLine("  --verbose           失败时输出完整异常栈");
+            Console.WriteLine("  --report            run/showcase/quickstart 后打印步骤执行树");
+            Console.WriteLine();
+            Console.WriteLine("示例:");
+            Console.WriteLine("  dotnet run --project ... -c Release -- quickstart");
+            Console.WriteLine("  dotnet run --project ... -c Release -- showcase");
+            Console.WriteLine("  dotnet run --project ... -c Release -- --report run Station_HappyPath");
             return 0;
+        }
+
+        /// <summary>客户开发者 5 分钟路径：单场景 + 步骤树 + 下一步提示。</summary>
+        private static async Task<int> QuickstartAsync(string scenariosDir)
+        {
+            OnboardingGuide.PrintQuickstartIntro();
+
+            var path = ResolveScenarioPath(scenariosDir, "Station_HappyPath");
+            var result = await ExecuteScenarioAsync(path, verbose: true);
+            RunReportPrinter.Print(result);
+
+            Console.WriteLine();
+            Console.WriteLine($"OverallSuccess = {result.OverallSuccess}");
+            OnboardingGuide.PrintQuickstartNextSteps(result.OverallSuccess);
+
+            return result.OverallSuccess ? 0 : 1;
+        }
+
+        private static int PrintCapabilities()
+        {
+            Console.WriteLine("Gear.NET 能力矩阵 — 不知道抄哪个 JSON 时，先看这张表");
+            Console.WriteLine("（详细说明：demos/IndustryKit/GETTING_STARTED.md · Scenarios/README.md）");
+            Console.WriteLine(new string('-', 72));
+            foreach (var entry in CapabilityCatalog.All)
+            {
+                Console.WriteLine($"[{entry.Layer}] {entry.Capability}");
+                Console.WriteLine($"  场景: {entry.ScenarioFile}");
+                Console.WriteLine($"  证明: {entry.Proof}");
+                Console.WriteLine();
+            }
+
+            return 0;
+        }
+
+        private static async Task<int> ShowcaseAsync(string scenariosDir, bool report)
+        {
+            Console.WriteLine("[showcase] 产品能力橱窗 — 5 个代表场景（全部期望 PASS）");
+            Console.WriteLine("提示：这是产品演示，不是发版门禁；门禁请用 verify（含故意 FAIL）。");
+            Console.WriteLine();
+
+            var failed = 0;
+            foreach (var item in ShowcaseCatalog.All)
+            {
+                Console.WriteLine($"══ {item.Title}");
+                Console.WriteLine($"   场景: {item.ScenarioFile}");
+                Console.WriteLine($"   亮点: {item.Highlight}");
+                Console.WriteLine();
+
+                var path = ResolveScenarioPath(scenariosDir, item.ScenarioFile);
+                var result = await ExecuteScenarioAsync(path, verbose: true);
+                Console.WriteLine($"   → OverallSuccess={result.OverallSuccess}");
+                if (report)
+                {
+                    RunReportPrinter.Print(result);
+                }
+
+                if (!result.OverallSuccess)
+                {
+                    failed++;
+                }
+
+                Console.WriteLine();
+            }
+
+            if (failed == 0)
+            {
+                Console.WriteLine("SHOWCASE_ALL_PASS");
+                return 0;
+            }
+
+            Console.WriteLine($"SHOWCASE_FAIL ({failed} 场景失败)");
+            return 1;
         }
 
         private static async Task<int> UnknownAsync(string command)
@@ -82,10 +194,11 @@ namespace ZL.Gear.Samples.Industry.Client
             {
                 Console.WriteLine(Path.GetFileName(file));
             }
+
             return 0;
         }
 
-        private static async Task<int> RunOneAsync(string scenariosDir, string? nameOrPath)
+        private static async Task<int> RunOneAsync(string scenariosDir, string? nameOrPath, bool verbose, bool report)
         {
             if (string.IsNullOrWhiteSpace(nameOrPath))
             {
@@ -98,12 +211,17 @@ namespace ZL.Gear.Samples.Industry.Client
             Console.WriteLine();
             Console.WriteLine($"OverallSuccess = {result.OverallSuccess}");
             Console.WriteLine($"Summary        = {result.Summary}");
+            if (report || verbose)
+            {
+                RunReportPrinter.Print(result);
+            }
+
             return result.OverallSuccess ? 0 : 1;
         }
 
-        private static async Task<int> VerifyAllAsync(string scenariosDir)
+        private static async Task<int> VerifyAllAsync(string scenariosDir, bool verbose)
         {
-            Console.WriteLine("[verify] 开始闭环验证（PASS / 故意 FAIL / 超时契约 / 行业 JSON 分叉）...");
+            Console.WriteLine($"[verify] 开始闭环验证（{VerificationCatalog.All.Count} 条门禁）...");
             Console.WriteLine();
 
             var failures = new List<string>();
@@ -112,26 +230,28 @@ namespace ZL.Gear.Samples.Industry.Client
                 var path = ResolveScenarioPath(scenariosDir, testCase.ScenarioFile);
                 Console.WriteLine($"── {testCase.Id}");
                 Console.WriteLine($"   文件: {Path.GetFileName(path)}");
-                Console.WriteLine($"   期望: OverallSuccess={testCase.ExpectSuccess}");
+                Console.WriteLine($"   期望: OverallSuccess={testCase.ExpectSuccess}"
+                                  + (string.IsNullOrEmpty(testCase.SummaryContains)
+                                      ? string.Empty
+                                      : $", Summary∋「{testCase.SummaryContains}」"));
 
                 var result = await ExecuteScenarioAsync(path, verbose: false);
-                var ok = result.OverallSuccess == testCase.ExpectSuccess;
-                if (ok && !string.IsNullOrEmpty(testCase.SummaryContains)
-                    && (result.Summary == null
-                        || result.Summary.IndexOf(testCase.SummaryContains, StringComparison.OrdinalIgnoreCase) < 0))
-                {
-                    ok = false;
-                }
-
-                if (ok)
+                if (MatchesExpectation(testCase, result, out var mismatch))
                 {
                     Console.WriteLine($"   结果: PASS（实际 OverallSuccess={result.OverallSuccess}）");
                 }
                 else
                 {
-                    var msg = $"FAIL 期望 Success={testCase.ExpectSuccess}，实际={result.OverallSuccess}；Summary={result.Summary}";
-                    Console.WriteLine($"   结果: {msg}");
-                    failures.Add($"{testCase.Id}: {msg}");
+                    Console.WriteLine($"   结果: FAIL {mismatch}");
+                    failures.Add($"{testCase.Id}: {mismatch}");
+                    if (verbose && !string.IsNullOrWhiteSpace(result.Summary))
+                    {
+                        Console.WriteLine("   --- Summary ---");
+                        foreach (var line in result.Summary.Split('\n'))
+                        {
+                            Console.WriteLine($"   {line.TrimEnd()}");
+                        }
+                    }
                 }
 
                 Console.WriteLine();
@@ -148,8 +268,75 @@ namespace ZL.Gear.Samples.Industry.Client
             {
                 Console.WriteLine($"  - {f}");
             }
+
             return 1;
         }
+
+        /// <summary>判定单条验证用例是否满足期望（OverallSuccess + 可选 Summary 子串）。</summary>
+        private static bool MatchesExpectation(VerificationCase testCase, TestRunResult result, out string mismatch)
+        {
+            if (result.OverallSuccess != testCase.ExpectSuccess)
+            {
+                mismatch = $"期望 Success={testCase.ExpectSuccess}，实际={result.OverallSuccess}";
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(testCase.SummaryContains)
+                && !ResultContainsText(result, testCase.SummaryContains))
+            {
+                mismatch = $"未找到期望文本「{testCase.SummaryContains}」；Summary 首行={FirstLine(result.Summary)}";
+                return false;
+            }
+
+            mismatch = string.Empty;
+            return true;
+        }
+
+        private static string FirstLine(string? text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return "(empty)";
+            }
+
+            var idx = text.IndexOf('\n');
+            return idx < 0 ? text : text.Substring(0, idx);
+        }
+
+        /// <summary>在 Summary 或步骤树 Message 中查找子串（Log 输出在步骤 Message 内）。</summary>
+        private static bool ResultContainsText(TestRunResult result, string needle)
+        {
+            if (result.Summary != null
+                && result.Summary.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            return StepTreeContains(result.StepResults, needle);
+        }
+
+        private static bool StepTreeContains(IReadOnlyList<StepRunResult> steps, string needle)
+        {
+            foreach (var step in steps)
+            {
+                if (ContainsIgnoreCase(step.Message, needle)
+                    || ContainsIgnoreCase(step.StepName, needle)
+                    || ContainsIgnoreCase(step.StepConfig?.StepKey, needle))
+                {
+                    return true;
+                }
+
+                if (StepTreeContains(step.SubStepResults, needle))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsIgnoreCase(string? haystack, string needle) =>
+            haystack != null && haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
 
         /// <summary>
         /// 执行单个场景 JSON（L-Test 宿主 + L-DSL DynamicFlow + L-Adapter 扩展）。
@@ -162,7 +349,7 @@ namespace ZL.Gear.Samples.Industry.Client
         /// <item><c>WithExtension</c>：扩展须 RegisterHandlerWithAction，否则 JSON ActionKey 无法解析（灾难型静默跳过）。</item>
         /// </list>
         /// </remarks>
-        private static async Task<ZL.Gear.Core.Runner.TestRunResult> ExecuteScenarioAsync(string scenarioPath, bool verbose)
+        private static async Task<TestRunResult> ExecuteScenarioAsync(string scenarioPath, bool verbose)
         {
             Action<string> log = verbose
                 ? Console.WriteLine
@@ -245,7 +432,7 @@ namespace ZL.Gear.Samples.Industry.Client
                 Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Scenarios")),
                 Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Scenarios")),
                 Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(),
-                    "samples", "IndustryKit", "ZL.Gear.Samples.Industry.Client", "Scenarios"))
+                    "demos", "IndustryKit", "ZL.Gear.Samples.Industry.Client", "Scenarios"))
             };
 
             foreach (var dir in candidates)
