@@ -3,8 +3,10 @@ using System.Collections.Generic;
 
 namespace ZL.Gear.Core.Events
 {
+    // G1d-04: line-specific PLC event types moved to Ext.Seat.Events; only generic types remain here.
+
     /// <summary>
-    /// PLC 状态变更事件 (通用包装)
+    /// PLC 状态变更事件 (通用 key/value 包装)
     /// </summary>
     public class PlcStateChangedEvent : BaseEvent
     {

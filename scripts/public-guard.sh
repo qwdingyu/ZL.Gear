@@ -100,8 +100,7 @@ fi
 #  - 覆盖 座椅/SBR/电检/盐城/自学习/CAN自学习UI/PLC↔UI桥/NoiseService 等全部历史污染词根；
 #  - 追加 ModelStepService|PFLite|Dzjdq|Dljdq|Frm_Seat|SeatTest|AutoSbr|双手启动|TwoHandStart
 #    （本轮实测零命中，防 legacy 词汇随迁移复入公开轨）；
-#  - 有意不收录 PlcAutoManual：ThreadPlcAutoManualEvent 已按 179 §1.3 拆型为通用 PLC Auto/Manual
-#    事件（TwoHandStart 已移除），类名属通用工业语义，非行业词。
+#  - 有意不收录 PlcAutoManual/PlcLocation：已迁 Ext.Seat（G1d-04）；公开 Core 不含此类名。
 G0_10_PATTERN='座椅|SBR|SeatCode|UiPlcEvents|ParseSensorSpecs|盐城|NoiseService|安全带|电检|靠背|座垫|自学习|卡扣|ModelStepService|PFLite|Dzjdq|Dljdq|Frm_Seat|SeatTest|AutoSbr|双手启动|TwoHandStart'
 if rg -l "$G0_10_PATTERN" src --glob '*.cs' --glob '!**/tests/**' 2>/dev/null; then
   fail "G0-10: 公开 src 仍含行业关键词（见 179 §6.3 扩展词表）"
