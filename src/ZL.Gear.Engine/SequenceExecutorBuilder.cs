@@ -389,7 +389,8 @@ namespace ZL.Gear.Engine
                 _resourceHolder,
                 _disposeDeviceService && _customDeviceService == null,
                 _disposeProfileService && _customProfileService == null,
-                _resultEvaluator ?? ResultEvaluator.Instance);
+                _resultEvaluator ?? ResultEvaluator.Instance,
+                provider);
         }
 
         /// <summary>
@@ -524,8 +525,9 @@ namespace ZL.Gear.Engine
             List<IDisposable> resourceHolder,
             bool disposeDeviceService,
             bool disposeProfileService,
-            IResultEvaluator resultEvaluator)
-            : base(deviceService, profileService, null, logger, resultEvaluator, testStepInterval)
+            IResultEvaluator resultEvaluator,
+            IServiceProvider serviceProvider)
+            : base(deviceService, profileService, null, logger, resultEvaluator, testStepInterval, serviceProvider)
         {
             _deviceService = deviceService;
             _profileService = profileService;

@@ -518,5 +518,16 @@ namespace ZL.Gear.Engine.Runner
                 return ExecutionResult<List<Measurement>>.Failed($"执行错误: {ex.ToString().Replace("\r", "").Replace("\n", " ")}");
             }
         }
+
+        /// <summary>
+        /// 观察超时后仍在运行的延迟 Handler 任务，防止 UnobservedTaskException 崩溃进程。
+        /// 延迟完成的结果已被引擎隔离丢弃，不会发布到结果树或改变 Verdict。
+        /// </summary>
+        private static void ObserveLateTask(Task task)
+        {
+            _ = task.ContinueWith(
+                t => { _ = t.Exception; }, // 触达异常，仅观察，不处理
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+        }
     }
 }

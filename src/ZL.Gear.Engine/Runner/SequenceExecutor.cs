@@ -34,6 +34,7 @@ namespace ZL.Gear.Engine.Runner
         private readonly IDeviceService _deviceService;
         private readonly ILogger _logger;
         private readonly IGearProfileService _profileService;
+        private readonly IServiceProvider _serviceProvider;
         private CancellationTokenSource _cancellationTokenSource;
         private bool _disposed;
         private readonly Stopwatch _totalSw = new();
@@ -59,6 +60,10 @@ namespace ZL.Gear.Engine.Runner
         /// </summary>
         private int _testStepInterval = 50;
         private IProgress<StepRunResult> _progressReporter;
+        /// <summary>
+        /// 同实例并发执行护栏：0=空闲，1=运行中（Interlocked 原子切换，single-flight）。
+        /// </summary>
+        private int _isExecuting;
 
         private void _log(string msg) => _logger?.LogInformation(msg);
 
@@ -71,7 +76,8 @@ namespace ZL.Gear.Engine.Runner
             IEventBus eventBus,
             ILogger<SequenceExecutor> logger,
             IResultEvaluator resultEvaluator = null,
-            int testStepInterval = 500)
+            int testStepInterval = 500,
+            IServiceProvider serviceProvider = null)
         {
             _deviceService = deviceService ?? throw new ArgumentNullException(nameof(deviceService));
             _profileService = profileService ?? throw new ArgumentNullException(nameof(profileService));
@@ -79,10 +85,21 @@ namespace ZL.Gear.Engine.Runner
             _logger = logger;
             _resultEvaluator = resultEvaluator;
             _testStepInterval = testStepInterval;
+            // P0-3：优先使用 Builder 注入的独立 ServiceProvider，避免进程级 WorkflowGlobal 跨运行污染；
+            // 未注入时回退 WorkflowGlobal.Services（legacy 兼容，仅单运行时场景）。
+            _serviceProvider = serviceProvider;
             var roles = _profileService.LoadDeviceRoles();
             deviceRoles = roles != null
                 ? new System.Collections.Concurrent.ConcurrentDictionary<string, object>(roles)
                 : new System.Collections.Concurrent.ConcurrentDictionary<string, object>();
+        }
+
+        /// <summary>
+        /// 解析本执行器专属的服务容器：优先注入的 provider，回退 WorkflowGlobal（legacy）。
+        /// </summary>
+        private IServiceProvider ResolveServices()
+        {
+            return _serviceProvider ?? WorkflowGlobal.Services;
         }
 
         private void Log(string message)
@@ -101,7 +118,7 @@ namespace ZL.Gear.Engine.Runner
         {
             try
             {
-                var dispatcher = WorkflowGlobal.Services.GetService(typeof(StepDispatcher)) as StepDispatcher;
+                var dispatcher = ResolveServices().GetService(typeof(StepDispatcher)) as StepDispatcher;
                 if (dispatcher == null) return null;
                 return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
             }
@@ -158,6 +175,41 @@ namespace ZL.Gear.Engine.Runner
             _progressReporter = progress;
             if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
 
+            // P0-2 安全护栏：同一执行器实例禁止并发执行（single-flight）。
+            // 并发 Run 会互相 Dispose/覆盖 CTS、进度与 Stopwatch，导致跨 Run 状态污染。
+            if (Interlocked.CompareExchange(ref _isExecuting, 1, 0) != 0)
+            {
+                throw new InvalidOperationException(
+                    "SequenceExecutor 不支持同实例并发执行：同一执行器实例同时只能运行一个测试 Run。" +
+                    "请为每个并发 Run 创建独立的 SequenceExecutor 实例（见 StationManager / RunScope 方案）。");
+            }
+
+            try
+            {
+                return await ExecuteCoreAsync(steps, model, barcode, globalContext, token);
+            }
+            finally
+            {
+                // 无论成功、失败还是异常，都必须复位并发标志，保证执行器可被复用。
+                Interlocked.Exchange(ref _isExecuting, 0);
+            }
+        }
+
+        /// <summary>
+        /// 执行核心逻辑（由 <see cref="ExecuteAsync"/> 的 single-flight 护栏保护后调用）。
+        /// </summary>
+        private async Task<TestRunResult> ExecuteCoreAsync(
+            List<StepConfig> steps,
+            string model,
+            string barcode,
+            Dictionary<string, object> globalContext,
+            CancellationToken token)
+        {
+            // P0-4：运行快照隔离。BindProfile / Normalize / EvaluateResult 回填都会就地修改 StepConfig，
+            // 直接在入口深拷贝整棵步骤树，保证调用方传入的原始 Plan（含逻辑角色 Target）不被污染，
+            // 同一 Plan 可安全重跑、换工位或并发运行。
+            var planSnapshot = steps.Select(s => (StepConfig)s.Clone()).ToList();
+
             // Dispose existing CTS to prevent memory leak
             if (_cancellationTokenSource != null)
             {
@@ -194,7 +246,7 @@ namespace ZL.Gear.Engine.Runner
                 try
                 {
                     // === 1. 资源管理阶段 ===
-                    activeDevices = await LeaseRequiredDevicesAsync(steps, activeLeases, cancellationToken);
+                    activeDevices = await LeaseRequiredDevicesAsync(planSnapshot, activeLeases, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -215,7 +267,7 @@ namespace ZL.Gear.Engine.Runner
                     // ============================================================================
 
                     // 找出所有步骤（包括所有子步骤）
-                    var allSteps = steps.SelectMany(s => StepKit.FlattenSteps(s)).ToList();
+                    var allSteps = planSnapshot.SelectMany(s => StepKit.FlattenSteps(s)).ToList();
                     //如果DependsOn不为空，则为主步骤，需要再加防护（明确的标识出 IsMaster
                     var masterStepKeys = new HashSet<string>(allSteps.Where(step => !string.IsNullOrEmpty(step.DependsOn)).Select(step => step.DependsOn));
                     // 为每一个被识别出的主步骤，预先创建并注册信令对象
@@ -226,7 +278,7 @@ namespace ZL.Gear.Engine.Runner
                     }
                     // 初始化结果树
                     // 为每一个顶层步骤配置创建一个对应的 StepRunResult 实例
-                    runResult.StepResults = steps.Where(s => s.Enable).Select(cfg => new StepRunResult(cfg)).ToList();
+                    runResult.StepResults = planSnapshot.Where(s => s.Enable).Select(cfg => new StepRunResult(cfg)).ToList();
 
                     // 执行阶段：启动递归执行
                     // 之前的 for 循环被这个循环替代，我们遍历顶层的 StepRunResult
@@ -236,7 +288,7 @@ namespace ZL.Gear.Engine.Runner
 
                         string stepKey = topLevelStepResult.StepKey;
                         // 在 stepConfigs 中找到与 topLevelStepResult 对应的 StepConfig
-                        var stepConfig = steps.First(cfg => cfg.StepKey == stepKey);
+                        var stepConfig = planSnapshot.First(cfg => cfg.StepKey == stepKey);
 
                         if (!stepConfig.Enable)
                         {
@@ -244,7 +296,7 @@ namespace ZL.Gear.Engine.Runner
                             topLevelStepResult.Outcome = StepOutcome.Skipped;
                             continue;
                         }
-                        var context = new StepContext(stepKey, stepConfig, new ReadOnlyDictionary<string, IDevice>(activeDevices), WorkflowGlobal.Services, cancellationToken,
+                        var context = new StepContext(stepKey, stepConfig, new ReadOnlyDictionary<string, IDevice>(activeDevices), ResolveServices(), cancellationToken,
                             RunTestMode.Auto, sharedData, globalContext, null, _log);
 
                         // 注入点：调用 BindProfile 将 Profile 中的映射应用到 Step 配置中
@@ -308,7 +360,7 @@ namespace ZL.Gear.Engine.Runner
                 runInterrupted,
                 runResult.StepResults);
             runResult.Summary = BuildSummary(runResult);
-            HandleFinalResultsAsync(runResult, steps, model, barcode);
+            HandleFinalResultsAsync(runResult, planSnapshot, model, barcode);
             _log("==================================================");
             _log("测试总结");
             _log(runResult.Summary);

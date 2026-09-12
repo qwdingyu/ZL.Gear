@@ -17,7 +17,12 @@ namespace ZL.Gear.Engine.Runner.Middlewares
     /// </summary>
     public class DiagnosticsMiddleware : IStepMiddleware
     {
-        private static readonly ConcurrentDictionary<string, List<double>> _stats = new();
+        /// <summary>
+        /// 每个命令保留的最近样本数上限（固定窗口），防止产线长稳运行时无限增长。
+        /// </summary>
+        private const int MaxSamplesPerCommand = 1000;
+
+        private static readonly ConcurrentDictionary<string, ConcurrentQueue<double>> _stats = new();
         private readonly Action<string> _log;
         private readonly IMetrics _metrics;
         private readonly IActivity _activity;
@@ -70,15 +75,18 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
         private void RecordStat(string command, double ms)
         {
-            var list = _stats.GetOrAdd(command, _ => new List<double>());
-            lock (list)
+            var queue = _stats.GetOrAdd(command, _ => new ConcurrentQueue<double>());
+            queue.Enqueue(ms);
+
+            // 固定窗口：超过上限时淘汰最旧样本，内存有界（O(命令数 × 窗口)）。
+            while (queue.Count > MaxSamplesPerCommand)
             {
-                list.Add(ms);
+                queue.TryDequeue(out _);
             }
         }
 
         /// <summary>
-        /// 生成诊断报告
+        /// 生成诊断报告（基于固定窗口内的样本聚合）。
         /// </summary>
         public static string GenerateReport()
         {
@@ -89,11 +97,14 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             sb.AppendLine($"| {"命令类型",-15} | {"调用次数",-8} | {"平均耗时(ms)",-12} | {"最大耗时(ms)",-12} |");
             sb.AppendLine("|-----------------|----------|--------------|--------------|");
 
-            foreach (var kvp in _stats.OrderByDescending(x => x.Value.Average()))
+            foreach (var kvp in _stats)
             {
-                var avg = kvp.Value.Average();
-                var max = kvp.Value.Max();
-                sb.AppendLine($"| {kvp.Key,-15} | {kvp.Value.Count,-8} | {avg,-12:F2} | {max,-12:F2} |");
+                var samples = kvp.Value.ToArray();
+                if (samples.Length == 0) continue;
+
+                var avg = samples.Average();
+                var max = samples.Max();
+                sb.AppendLine($"| {kvp.Key,-15} | {samples.Length,-8} | {avg,-12:F2} | {max,-12:F2} |");
             }
             sb.AppendLine("==================================================");
             return sb.ToString();
