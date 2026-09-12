@@ -23,7 +23,12 @@ namespace ZL.Gear.Extension.Station.Handlers
         public Task<ExecutionResultBase> ExecuteAsync(StepConfig step, StepContext context)
         {
             var args = StepArgsReader.From(step, context, "MarkComplete");
-            var recipeId = args.GetFlowString("RecipeId");
+
+            // 能执行到本步说明前序 Assert 已通过；RecipeId 须由 ApplyRecipe 写入流程变量
+            if (!args.TryRequireFlowString("RecipeId", out var recipeId, out var err))
+            {
+                return Task.FromResult(StepArgsReader.Fail(err));
+            }
 
             args.SetShared("StationDone", true);
             context.Log($"[Industry.Station] MarkComplete RecipeId={recipeId} → StationDone=true");

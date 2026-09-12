@@ -25,26 +25,20 @@ namespace ZL.Gear.Extension.Station.Handlers
             var args = StepArgsReader.From(step, context, "ProbeChannel");
 
             // 1) Args 显式含 MeasuredOhm → 必须解析成功（禁止无效值静默回退 SimulatedOhm）
-            // 2) 未提供 MeasuredOhm → 读前序 ApplyRecipe SetShared 的 SimulatedOhm（VariablesOnly）
-            var hasMeasuredArg = step.Parameters != null && step.Parameters.ContainsKey("MeasuredOhm");
+            // 2) 未提供 MeasuredOhm → 读前序 ApplyRecipe SetShared 的 SimulatedOhm（VariablesOnly，须为正）
             double measured;
             string err;
 
-            if (hasMeasuredArg)
+            if (HasArgKey(step, "MeasuredOhm"))
             {
                 if (!args.TryRequirePositiveDouble("MeasuredOhm", StepArgSource.ArgsOnly, out measured, out err))
                 {
                     return Task.FromResult(StepArgsReader.Fail(err));
                 }
             }
-            else if (!args.TryGetDouble("SimulatedOhm", StepArgSource.VariablesOnly, out measured, out err))
+            else if (!args.TryRequirePositiveDouble("SimulatedOhm", StepArgSource.VariablesOnly, out measured, out err))
             {
                 return Task.FromResult(StepArgsReader.Fail(err));
-            }
-            else if (measured <= 0)
-            {
-                return Task.FromResult(StepArgsReader.Fail(
-                    "ProbeChannel SimulatedOhm 须为正数（前序 ApplyRecipe 应已 SetShared）。"));
             }
 
             args.SetShared("MeasuredOhm", measured);
@@ -54,5 +48,9 @@ namespace ZL.Gear.Extension.Station.Handlers
             return Task.FromResult<ExecutionResultBase>(
                 ExecutionResult.Succeeded($"探测完成: {measured}"));
         }
+
+        /// <summary>本步 Args 是否显式提供键（区分「未提供」与「提供了无效值」）。</summary>
+        private static bool HasArgKey(StepConfig step, string key) =>
+            step.Parameters != null && step.Parameters.ContainsKey(key);
     }
 }

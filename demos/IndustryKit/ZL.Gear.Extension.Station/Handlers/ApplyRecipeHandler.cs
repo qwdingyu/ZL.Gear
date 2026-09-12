@@ -11,12 +11,12 @@ namespace ZL.Gear.Extension.Station.Handlers
     /// </summary>
     /// <remarks>
     /// 参数契约（与 <see cref="StepHandlerCommandAttribute.ParameterSchema"/> 字符串同义，运行时由 <see cref="StepArgsReader"/> 执行）：
-    /// RecipeId:string; LimitOhm:double+; SimulatedOhm:double; ChannelId:string=CH1
+    /// RecipeId:string; LimitOhm:double+; SimulatedOhm:double+; ChannelId:string=CH1
     /// </remarks>
     [StepHandlerCommand(
         StationCommands.ApplyRecipe,
         Description = "应用工位配方限值与仿真注入",
-        ParameterSchema = "RecipeId:string 配方ID; LimitOhm:double+ 判据上限; SimulatedOhm:double 仿真测量; ChannelId:string(CH1) 通道")]
+        ParameterSchema = "RecipeId:string 配方ID; LimitOhm:double+ 判据上限; SimulatedOhm:double+ 仿真测量; ChannelId:string(CH1) 通道")]
     public sealed class ApplyRecipeHandler : IStepHandler
     {
         /// <inheritdoc />
@@ -34,8 +34,8 @@ namespace ZL.Gear.Extension.Station.Handlers
                 return Task.FromResult(StepArgsReader.Fail(err));
             }
 
-            // 无真实仪表时须在 Args 注入；接表后本键可改为可选或删除
-            if (!args.TryGetDouble("SimulatedOhm", StepArgSource.ArgsOnly, out var simulatedOhm, out err, true))
+            // 无真实仪表时须在 Args 注入正数；与 ProbeChannel Variables 路径校验对齐
+            if (!args.TryRequirePositiveDouble("SimulatedOhm", StepArgSource.ArgsOnly, out var simulatedOhm, out err))
             {
                 return Task.FromResult(StepArgsReader.Fail(err));
             }
@@ -46,9 +46,10 @@ namespace ZL.Gear.Extension.Station.Handlers
             args.SetShared("LimitOhm", limitOhm);
             args.SetShared("SimulatedOhm", simulatedOhm);
             args.SetShared("ChannelId", channelId);
+            args.SetShared("ChannelReady", true);
             args.SetShared("StationDone", false);
 
-            context.Log($"[Industry.Station] ApplyRecipe RecipeId={recipeId}, Channel={channelId}, LimitOhm={limitOhm}, SimulatedOhm={simulatedOhm}");
+            context.Log($"[Industry.Station] ApplyRecipe RecipeId={recipeId}, Channel={channelId}, LimitOhm={limitOhm}, SimulatedOhm={simulatedOhm}, ChannelReady=true");
             return Task.FromResult<ExecutionResultBase>(
                 ExecutionResult.Succeeded($"配方已应用: {recipeId}"));
         }

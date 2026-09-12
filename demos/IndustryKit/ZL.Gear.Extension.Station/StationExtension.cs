@@ -17,6 +17,10 @@ namespace ZL.Gear.Extension.Station
     /// </remarks>
     public sealed class StationExtension : IGearExtension
     {
+        private static readonly ApplyRecipeHandler ApplyRecipeHandler = new();
+        private static readonly ProbeChannelHandler ProbeChannelHandler = new();
+        private static readonly MarkCompleteHandler MarkCompleteHandler = new();
+
         /// <summary>扩展显示名。</summary>
         public string Name => "Industry.Station";
 
@@ -30,9 +34,9 @@ namespace ZL.Gear.Extension.Station
         /// </remarks>
         public void Initialize(IStepHandlerRegistry registry)
         {
-            registry.RegisterHandlerWithAction(StationCommands.ApplyRecipe, new ApplyRecipeHandler());
-            registry.RegisterHandlerWithAction(StationCommands.ProbeChannel, new ProbeChannelHandler());
-            registry.RegisterHandlerWithAction(StationCommands.MarkComplete, new MarkCompleteHandler());
+            registry.RegisterHandlerWithAction(StationCommands.ApplyRecipe, ApplyRecipeHandler);
+            registry.RegisterHandlerWithAction(StationCommands.ProbeChannel, ProbeChannelHandler);
+            registry.RegisterHandlerWithAction(StationCommands.MarkComplete, MarkCompleteHandler);
         }
     }
 
