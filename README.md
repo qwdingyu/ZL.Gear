@@ -20,3 +20,7 @@ bash check_release_public.sh   # 含 scripts/public-guard.sh (G0)
 ## 教学模板
 
 [`demos/IndustryKit/`](demos/IndustryKit/) — 无硬件、无 Drivers 的 LogicOnly 行业扩展示范。
+
+## 版本
+
+当前公开轨 **v1.0.0**（MIT）。Instrumented 驱动与 ConsoleApp 场景库在 sibling 私有仓，不在本仓库。

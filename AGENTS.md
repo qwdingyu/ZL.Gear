@@ -38,7 +38,7 @@ dotnet build src/ZL.Gear.Core/ZL.Gear.Core.csproj
 dotnet build ../ZL.Gear.Drivers/ZL.Gear.Drivers/ZL.Gear.Drivers.csproj
 dotnet build src/ZL.Gear.Engine/ZL.Gear.Engine.csproj
 dotnet build src/ZL.Gear.Sensing/ZL.Gear.Sensing.csproj
-dotnet build ZL.Gear.Extension.Seat/ZL.Gear.Solutions.Seat.csproj
+dotnet build ../ZL.Gear.Exts/ZL.Gear.Ext.Seat/ZL.Gear.Ext.Seat.csproj
 dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj
 ```
 
@@ -311,14 +311,14 @@ public void StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision()
 1. 在 `ZL.Gear.Drivers/Devices` 下创建设备类
 2. 实现 `IDevice` 或 `IDeviceDriver` 接口
 3. 在 `DeviceFactory` 中注册设备类型
-4. 行业步骤优先用 `IGearExtension` + `StepArgsReader`（见 docs/140），参考 `demos/IndustryKit/`，勿再向 `ZL.Gear.Extension.Seat` 堆业务
+4. 行业步骤优先用 `IGearExtension` + `StepArgsReader`，参考 `demos/IndustryKit/`，勿再向私有 `ZL.Gear.Ext.Seat` 堆业务
 
 ### 7.2 添加新测试步骤 / 行业扩展
 
 1. **推荐**：复制 `demos/IndustryKit/ZL.Gear.Extension.Station`，实现 `IGearExtension`，`RegisterHandlerWithAction`
 2. 配方用 DynamicFlow JSON（docs/134–137 新方言）；宿主 `WithExtension(...).WithBuiltInModules(...)`
 3. 用 `samples/IndustryKit` 客户端 `verify` 做 PASS/故意 FAIL/超时闭环
-4. 早期 `ZL.Gear.Extension.Seat` 仅作私有 PLC 遗产参考，**不要**作为新行业模板拷贝源（见 docs/139）
+4. 早期 `ZL.Gear.Ext.Seat`（Exts 私有仓）仅作 PLC 遗产参考，**不要**作为新行业模板拷贝源
 
 **PR 自检（产线相关，详见 §8.2 · docs/140 §六 · docs/141 §九–§十）：**
 
