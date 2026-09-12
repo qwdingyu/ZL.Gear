@@ -121,9 +121,10 @@ Session Variables
 
 | 测试 | 文件 |
 |------|------|
-| StepArgsReader 单元 | `ZL.Gear.Drivers.Tests/StepArgsReaderTests.cs` |
-| 扩展加载 | `PluginChainLoadTests` |
-| 行业闭环 | `samples/IndustryKit` → `INDUSTRY_KIT_VERIFY_PASS` |
+| StepArgsReader 单元 | 私有仓 `ZL.Gear.Drivers.Tests/StepArgsReaderTests.cs` |
+| 扩展加载 | 私有仓 `PluginChainLoadTests` |
+| 行业闭环 | `demos/IndustryKit/verify.sh` → `INDUSTRY_KIT_VERIFY_PASS`（7 条） |
+| Args 覆盖范例 | `ProbeChannelHandler.cs` + `Station_ProbeOverride.json` |
 
 ---
 
@@ -135,4 +136,4 @@ Session Variables
 | 2026-09-10 | 增补 GlobalOnly / GetGlobalString；ArgsThenVariables null 回退 |
 | 2026-09-11 | §五 ProbeChannel 模式更新；§六 增 11–14（可选 Args fail-closed、Assert 单条件、Agent dotnet 踩坑）；链 docs/141 §十 |
 | 2026-09-11 | §六 增 15（Sampling 禁 `Quantity`）；与 `ScenarioDemoLibraryTests` 对齐 |
-| 2026-09-12 | 公开轨整理：移除私有仓路径引用 |
+| 2026-09-12 | 公开轨整理；锚点改为 `demos/IndustryKit`；ApplyRecipe SimulatedOhm 正数校验 |
