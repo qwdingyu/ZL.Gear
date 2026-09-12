@@ -57,13 +57,16 @@ dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.cspro
 # 运行单个测试方法
 dotnet test ../ZL.Gear.Drivers/ZL.Gear.Drivers.Tests/ZL.Gear.Drivers.Tests.csproj --filter "FullyQualifiedName~ModuleLoaderRegressionTests.StepDispatcher_仅Core_不应注册GenericMeasure与AiDecision"
 
-# Extensions.Data.Tests（已在 ZL.Gear.sln；check_release 第 7 步 Release 专项仍保留）
+# 公开轨单元测试（check_release 第 2 步）
+dotnet test tests/ZL.Gear.Core.Tests/ZL.Gear.Core.Tests.csproj
+dotnet test tests/ZL.Gear.Engine.Tests/ZL.Gear.Engine.Tests.csproj
 dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj
+dotnet test tests/ZL.Gear.Sensing.Tests/ZL.Gear.Sensing.Tests.csproj
 ```
 
 ### 2.4 发版门禁与场景验证
 
-**公开轨真值源：`check_release_public.sh`（6 步）**——`public-guard.sh` (G0) → build → Data.Tests → IndustryKit verify（7 条）→ ExprDialectProof → dotnet pack（5 NuGet）。  
+**公开轨真值源：`check_release_public.sh`（6 步）**——`public-guard.sh` (G0) → build → Core/Engine/Extensions.Data/Sensing 单元测试 → IndustryKit verify（7 条）→ ExprDialectProof → dotnet pack（5 NuGet）。  
 **私有全栈**：`../ZL.Gear.Demos/check_release.sh`（先跑公开轨，再 Full + Drivers + ConsoleApp）。
 
 ```bash

@@ -97,7 +97,7 @@ Session Variables
 7. **Args 键存在但值为 null** → `ArgsThenVariables` 会回退 Variables（已修正）；JSON 勿写 `"Key": null` 若意图走回退。
 8. **DynamicFlow 外直接调 Handler** → 无 node 子作用域时 SetShared 写当前 store；行业 Handler 应在 DynamicFlow 内调用。
 9. **AiDecision** → 已于 2026-09-11 改为 `SetShared`（`AiDecisionScopeTests`）；其它 Engine 内置 OutputKey 路径仍为有意契约。
-10. **单测构造 StepContext** → 须非 null `IServiceProvider`（见 `StepArgsReaderTests`）。
+10. **单测构造 StepContext** → 须非 null `IServiceProvider`（公开轨用 `tests/ZL.Gear.Testing.Common/StepContextFactory`）。
 11. **可选 Args 覆盖** → 键存在则必须解析成功，禁止 `TryGet(..., out _)` 失败后静默回退（见 `ProbeChannelHandler`）。
 12. **Assert L1 `Check`** → 仅单条件（`Left Op Right`）；禁止 `&&`/`||`/括号；多条件拆多条 Assert（`AssertCheckParser`）。
 13. **`WorkflowDefinition.Variables` 预置限值** → 若 Handler 误用 `All`，会绕过 Args 校验（D-04）；限值应只来自 Args。
@@ -121,7 +121,8 @@ Session Variables
 
 | 测试 | 文件 |
 |------|------|
-| StepArgsReader 单元 | 私有仓 `ZL.Gear.Drivers.Tests/StepArgsReaderTests.cs` |
+| StepArgsReader 单元 | `tests/ZL.Gear.Core.Tests/StepArgsReaderTests.cs` |
+| Handler 产线合规 | `tests/ZL.Gear.Core.Tests/IndustryKitHandlerComplianceTests.cs` |
 | 扩展加载 | 私有仓 `PluginChainLoadTests` |
 | 行业闭环 | `demos/IndustryKit/verify.sh` → `INDUSTRY_KIT_VERIFY_PASS`（7 条） |
 | Args 覆盖范例 | `ProbeChannelHandler.cs` + `Station_ProbeOverride.json` |

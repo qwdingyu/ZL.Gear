@@ -13,6 +13,7 @@
 | **005_StepArgsReader使用规范** | ArgsOnly / SetShared / fail-closed |
 | **006_表达式变量与判定方言** | Calculate / Assert L1·L0 / 作用域 |
 | **007_验收门禁与测试指南** | 6 步公开轨 + 7 条 IndustryKit verify |
+| **008_测试体系审查与优化指南** | tests/ 分层矩阵、去重策略、backlog |
 
 **客户开发者快速入口**
 
