@@ -333,13 +333,13 @@ namespace ZL.Gear.Engine.Runner
             stepResult.StartTime = DateTime.Now;
             stepResult.Status = StepExecutionStatus.Running;
             //本项目中仅限于用于PLC在SBR测试中加压负载完成通知 测试步骤测试电流   ？？？？？  不要有并行的主步骤，否则会错乱
-            // RunnerEvents.StepStarted?.Invoke(context); // 逐步废弃
+            // LegacyBridge.RunnerEvents.StepStarted?.Invoke(context); // 逐步废弃
             _eventBus.Publish(new StepProgressEvent(stepResult));
             _log($"[执行] {stepConfig.StepName}...");
             _log($"[诊断] 步骤 {stepConfig.StepKey} 有 {stepConfig.SubSteps?.Count ?? 0} 个子步骤");
             // --- UI 更新点 (阶段四) ---
             // progress?.Report(stepResult);
-            // TestEvents.StepStarted?.Invoke(stepConfig.StepName); // 旧事件可保留或替换
+            // LegacyBridge.TestEvents.StepStarted?.Invoke(stepConfig.StepName); // 旧事件可保留或替换
 
             try
             {
