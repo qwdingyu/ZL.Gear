@@ -233,37 +233,5 @@ namespace ZL.Gear.Core.Models
             }
             target.SubSteps = result;
         }
-
-        public static Dictionary<string, object> ParseSensorSpecs(StepConfig step)
-        {
-            var specs = new Dictionary<string, object>();
-            if (step.Parameters != null && step.Parameters.TryGetValue("CustomerParam", out var cp) && cp != null)
-            {
-                string customerParam = cp.ToString();
-                if (!string.IsNullOrWhiteSpace(customerParam))
-                {
-                    var specNames = new[] { "Analog1", "Analog2", "Analog3" };
-                    string[] specsStr = customerParam.Split(',');
-                    int itemsToProcess = Math.Min(specNames.Length, specsStr.Length);
-        
-                    for (int i = 0; i < itemsToProcess; i++)
-                    {
-                        string name = specNames[i];
-                        string[] lclucl = specsStr[i].Split('|');
-                        if (lclucl.Length == 2 && int.TryParse(lclucl[0], out int lcl) && int.TryParse(lclucl[1], out int ucl))
-                        {
-                            // 使用 Dictionary 替代 SensorSpec 对象
-                            specs[name] = new Dictionary<string, object>
-                            {
-                                ["Name"] = name,
-                                ["LCL"] = lcl,
-                                ["UCL"] = ucl
-                            };
-                        }
-                    }
-                }
-            }
-            return specs;
-        }
     }
 }
