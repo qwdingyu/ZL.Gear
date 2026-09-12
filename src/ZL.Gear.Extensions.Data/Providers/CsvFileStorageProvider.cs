@@ -79,19 +79,19 @@ namespace ZL.Gear.Extensions.Data.Providers
             }
         }
 
-        public Task<int> SaveBatchAsync(IEnumerable<TestResultModel> results)
+        public async Task<int> SaveBatchAsync(IEnumerable<TestResultModel> results)
         {
-            if (results == null) return Task.FromResult(0);
+            if (results == null) return 0;
 
             int count = 0;
             foreach (var result in results)
             {
-                if (SaveAsync(result).Result)
+                if (await SaveAsync(result).ConfigureAwait(false))
                 {
                     count++;
                 }
             }
-            return Task.FromResult(count);
+            return count;
         }
 
         public async Task<IReadOnlyList<TestResultModel>> QueryByBarcodeAsync(string barcode, DateTime? startTime = null, DateTime? endTime = null)
