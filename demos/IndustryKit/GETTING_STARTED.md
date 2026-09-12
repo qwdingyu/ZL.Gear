@@ -1,0 +1,126 @@
+# IndustryKit — 5 分钟上手（给客户开发者）
+
+> 你**不需要**先读完全部 docs，也**不需要**仪器驱动。本页只回答三件事：**Gear 是什么、Demo 证明什么、你怎么抄到自己的项目**。
+
+---
+
+## 1. 用一句话理解 ZL.Gear
+
+**把产线测试步骤写成 JSON，引擎负责执行；设备动作在 Handler，合格判据在 JSON 的 Assert。**
+
+类比：OpenTAP / TestStand 的「Plan + Step 插件」，但我们是 **Headless .NET 库 + JSON 配方**，适合嵌进你的 WinForms/WPF/服务里，而不是再买一个重型 IDE。
+
+---
+
+## 2. 这个 Demo 在干什么？
+
+IndustryKit 模拟一个**电阻测试工位**（无真实硬件）：
+
+```text
+JSON 配方（Scenarios/*.json）
+    ↓  DynamicFlow 解释执行
+Engine（SequenceExecutor）—— 框架，NuGet 可引用
+    ↓  调用行业命令
+StationExtension —— 你要复制的「行业插件」样板
+    ApplyRecipe   → 写入限值/仿真值（SetShared）
+    ProbeChannel  → 模拟仪表读数（可换成真表）
+    MarkComplete  → 工位收尾
+    ↓
+Calculate / Assert —— 框架内置，判据写在 JSON 里
+    ↓
+OverallSuccess = true/false
+```
+
+**三层名字（知道即可，不必背）**
+
+| 名字 | 是什么 | 本 Demo 里对应 |
+|------|--------|----------------|
+| L-DSL | 配方与变量 | `DynamicFlow` JSON + `Calculate`/`Assert` |
+| L-Test | 跑测会话 | `SequenceExecutor`（`Program.cs` 里 Build） |
+| L-Adapter | 行业/设备 | `ZL.Gear.Extension.Station` |
+
+---
+
+## 3. 三条命令（按顺序跑）
+
+在仓库根目录执行（`dotnet run` 与参数之间必须有 `--`）：
+
+```bash
+# ① 第一次必跑：1 个场景 + 步骤树 + 下一步提示（约 10 秒）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- quickstart
+
+# ② 看产品能力橱窗（5 个代表场景，全部 PASS）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase
+
+# ③ 看「能力 ↔ 场景」对照表（不知道 JSON 该抄哪个时打开）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- capabilities
+```
+
+无参数直接 `dotnet run ...` 只会打印**欢迎说明**，不会跑测试（避免误触 7 条门禁）。
+
+---
+
+## 4. 打开哪一个 JSON？
+
+| 你的目标 | 先打开 | 说明 |
+|----------|--------|------|
+| 理解**框架**能做什么（并行/重试/等待/断言） | `Scenarios/Gear_Core_Showcase.json` | **无**行业 Handler |
+| 理解**行业扩展**怎么接 | `Scenarios/Station_HappyPath.json` | 最短合格路径，注释在 `Description` 字段 |
+| 只改配方、不改代码 | `Scenarios/Fork_Seatbelt_Like.json` | 复制后改 `RecipeId` / 限值 |
+| 接真实仪表 | 对照 `ProbeChannelHandler.cs` | 保持 `MeasuredOhm` 变量名不变 |
+
+场景文件旁有 [`Scenarios/README.md`](ZL.Gear.Samples.Industry.Client/Scenarios/README.md) 逐文件说明。
+
+---
+
+## 5. 复制到你的项目（最小清单）
+
+| 复制 / 引用 | 来源 | 说明 |
+|-------------|------|------|
+| NuGet | `ZL.Gear.Core` + `ZL.Gear.Engine` | 框架内核 |
+| 宿主样板 | `Program.cs` 里 `SequenceExecutorBuilder` 一段 | `AsLogicOnlyDemoHost()` + `WithExtension` |
+| 行业扩展 | 整个 `ZL.Gear.Extension.Station/` | 改名为 `Extension.YourIndustry`，改命令前缀 |
+| 配方 | `Scenarios/*.json` | 放到你的输出目录或配置路径 |
+
+**宿主最小代码**（从 IndustryKit `Program.cs` 提炼，嵌进你的 WinForms/服务/CLI）：
+
+```csharp
+using var executor = SequenceExecutorBuilder.Create()
+    .AsLogicOnlyDemoHost()                    // 无仪器；产线用 AsInstrumentedHost(...)
+    .WithBuiltInModules(BuiltInModules.Core)  // Calculate/Assert/DynamicFlow
+    .WithExtension(new StationExtension())    // 换成你的 IGearExtension
+    .Build();
+
+var steps = ScenarioLoader.Load("path/to/Station_HappyPath.json");
+var result = await executor.ExecuteAsync(steps, model: "MyLine", barcode: "SN001");
+// result.OverallSuccess → 上报 MES / UI
+```
+
+**不要复制**：`VerificationCatalog.cs`（CI 门禁）、`verify.sh`（除非你也做发版门禁）。
+
+---
+
+## 6. 三条铁律（产线安全，docs/004 展开）
+
+1. **限值在 JSON Args**，Handler 用 `ArgsOnly` + `TryRequire*`，禁止 `context.Get` 静默兜底。  
+2. **判据在 JSON Assert**，Handler 不做 `if (measured > limit) return Fail`。  
+3. **流程变量用 `SetShared`**，禁止 Handler 里 `Variables.Set`（后继步骤读不到）。
+
+---
+
+## 7. 常见困惑
+
+| 困惑 | 答案 |
+|------|------|
+| `verify` 为什么有 FAIL？ | 那是**故意**的失败用例，证明 Assert/超时不会假绿；客户日常用 `quickstart`/`showcase`，CI 才跑 `verify`。 |
+| `showcase` 和 `verify` 区别？ | showcase = 产品演示 5 条；verify = 发版门禁 7 条（含 2 条必须失败）。 |
+| 和 OpenTAP 比？ | 见根目录 [`README.md`](../../README.md)「与 OpenTAP / TestStand 的定位差异」。 |
+| 真实仪器在哪？ | 公开 MIT 轨**不含** Drivers；Instrumented 路径在私有仓，IndustryKit 用仿真演示扩展缝。 |
+
+---
+
+## 8. 读完之后
+
+- 改配方：复制 `Fork_Seatbelt_Like.json` → `dotnet run ... -- run YourScenario`  
+- 加行业动作：复制 Extension 工程 → 实现新 `ActionKey` → JSON 引用  
+- 深入规范：[`docs/004`](../../docs/004_行业扩展模板与使用场景_2026-09-12.md) · [`docs/005`](../../docs/005_StepArgsReader使用规范_2026-09-12.md)

@@ -1,77 +1,127 @@
-# IndustryKit — 最新架构行业可扩展 Demo
+# IndustryKit — 搞懂 ZL.Gear 怎么用的 Demo
 
-> 取代「早期 Seat 私有 DLL + 代码拼步骤」示范路径。  
-> 对齐：[docs/138](../../docs/138_ADR_微流程与执行器抽取边界_2026-09-10.md) · [docs/134–137](../../docs/) · [docs/139](../../docs/139_IndustryKit_行业扩展模板与客户端闭环_2026-09-10.md)
+> **给谁看**：第一次接触 ZL.Gear 的客户开发者、集成工程师。  
+> **证明什么**：JSON 写测试序列 + 行业 Handler 插件 + 执行与 Assert 分离 —— **无需仪器**即可跑通。  
+> **详细上手**：[`GETTING_STARTED.md`](GETTING_STARTED.md)（5 分钟 · 复制粘贴即可）
 
-## 前置说明（设计裁决）
+---
 
-| 学什么 | 不学什么（Seat 遗产） |
-|--------|----------------------|
-| `IGearExtension` + `RegisterHandlerWithAction` | 绑 `libs/PFLite|PlcBase` |
-| DynamicFlow JSON + docs/133 新方言 | SeatDemo 代码拼 `StepConfig` 树 |
-| `SequenceExecutorBuilder.WithExtension` + `BuiltInModules.Core` | 假定 Seat 已在 ModuleLoader 默认列表 |
-| 验证清单含 **故意 FAIL / 超时** | 只跑 HappyPath 假绿 |
+## 30 秒：这个 Demo 是什么？
 
-三层产品面：
+ZL.Gear 把产线测试写成 **JSON 配方**，Engine 负责执行。  
+IndustryKit 用**模拟电阻工位**演示完整链路：
 
 ```text
-Client（本目录）
-  └─ L-Test  SequenceExecutor
-        ├─ L-DSL   DynamicFlow（Scenarios/*.json）
-        └─ L-Adapter  StationExtension（可换成 Battery/PCBA…）
+Station_HappyPath.json
+  → ApplyRecipe（写限值 5Ω、仿真 2.5Ω）
+  → ProbeChannel（模拟仪表读数）
+  → Calculate（Margin = Limit - Measured）
+  → Assert（判合格）
+  → MarkComplete
+  → OverallSuccess
 ```
 
-## 目录
+**你要复制的**：`ZL.Gear.Extension.Station`（行业插件）+ `Program.cs` 里宿主组装 + `Scenarios/*.json`（配方）。  
+**你要引用的 NuGet**：`ZL.Gear.Core` + `ZL.Gear.Engine`。
 
-```text
-demos/IndustryKit/
-├── README.md
-├── verify.sh
-├── ZL.Gear.Extension.Station/     # 薄扩展，仅引用 Core
-└── ZL.Gear.Samples.Industry.Client/
-    ├── Program.cs                 # run / verify / list
-    ├── VerificationCatalog.cs     # 期望结果闭环
-    └── Scenarios/
-        ├── Station_HappyPath.json
-        ├── Station_AssertFail.json      # 期望失败
-        ├── Station_TimeoutContract.json # 期望失败
-        └── Fork_Seatbelt_Like.json      # 仅 JSON 换行业叙事
-```
+---
 
-## 客户端用法
+## 5 分钟上手（三条命令）
 
 在仓库根目录：
 
 ```bash
-# 闭环验证（须打印 INDUSTRY_KIT_VERIFY_PASS，exit 0）
-dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- verify
+# ① 第一次必跑（1 场景 + 步骤树 + 下一步提示）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- quickstart
 
-# 或
-./demos/IndustryKit/verify.sh
+# ② 看 5 个代表场景（产品能力全貌）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- showcase
 
-# 单场景
-dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- run Station_HappyPath
-dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- list
+# ③ 能力 ↔ 场景对照（不知道抄哪个 JSON 时）
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- capabilities
 ```
 
-## 如何扩展到其他行业（惯例）
+无参数 `dotnet run ...` 只打印欢迎说明，**不会**跑 7 条 CI 门禁。
 
-1. **先配方、后代码**：复制 `Fork_Seatbelt_Like.json`，改 `RecipeId` / 限值 / Assert 文案。能跑通则不要新建 Handler。  
-2. **真有行业特异动作**：复制 `ZL.Gear.Extension.Station` → `ZL.Gear.Extension.Battery`（或 PCBA），改命令前缀 `Industry.Battery.*`，在 `Initialize` 注册。  
-3. **设备接入**：把 `ProbeChannelHandler` 换成租真实仪表 + `Read`/`Query`，**共享变量键名保持不变**，JSON 可不动。  
-4. **宿主**：`WithBuiltInModules(Core | Sensing | Plc)` 按需勾选；`WithExtension(new XxxExtension())`。  
-5. **禁止**：把行业逻辑塞进 `ZL.Gear.Engine`；禁止抽「通用 Workflow NuGet」（见 ADR 138）。
+单场景 + 步骤树：
 
-## 闭环证明什么
+```bash
+dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Release -- --report run Station_HappyPath
+```
 
-| 用例 | 期望 | 证明 |
-|------|------|------|
-| HappyPath | Success | 扩展 ActionKey + Calculate + Assert L1 |
-| AssertFail | !Success | 不合格不得误 PASS |
-| TimeoutContract | !Success | 流程超时契约 |
-| Fork_Seatbelt | Success | 换行业可先只改 JSON |
+---
+
+## 目录结构（打开仓库先看哪）
+
+| 路径 | 你是谁 | 先看什么 |
+|------|--------|----------|
+| [`GETTING_STARTED.md`](GETTING_STARTED.md) | 客户开发者 | **全文** |
+| `Scenarios/Station_HappyPath.json` | 写配方的人 | 最短合格路径 JSON |
+| `Scenarios/README.md` | 写配方的人 | 7 个场景逐文件说明 |
+| `ZL.Gear.Extension.Station/Handlers/` | 写行业代码的人 | 三个 Handler 样板 |
+| `Program.cs` | 集成宿主的人 | `SequenceExecutorBuilder` 组装 |
+| `VerificationCatalog.cs` | 维护者 / CI | 发版门禁 7 条（含故意 FAIL） |
+
+```text
+demos/IndustryKit/
+├── GETTING_STARTED.md          ← 客户开发者入口
+├── README.md                   ← 本文件
+├── verify.sh                   ← CI 门禁包装（维护者）
+├── ZL.Gear.Extension.Station/  ← 复制到你的项目
+└── ZL.Gear.Samples.Industry.Client/
+    ├── Program.cs              ← 宿主样板
+    ├── OnboardingGuide.cs      ← quickstart 引导文案
+    ├── ShowcaseCatalog.cs      ← showcase 顺序
+    ├── CapabilityCatalog.cs    ← 能力矩阵
+    └── Scenarios/              ← JSON 配方库
+```
+
+---
+
+## 换行业 / 换产品要改什么？
+
+| 需求 | 改什么 | 不改什么 |
+|------|--------|----------|
+| 换限值、换产品型号 | 复制 JSON，改 `RecipeId` / `LimitOhm` / Assert | Extension DLL |
+| 换测试项（新动作） | 复制 Extension，加 Handler + `RegisterHandlerWithAction` | Engine |
+| 接真实仪表 | 改 `ProbeChannelHandler` 读设备，**保持** `MeasuredOhm` 变量名 | JSON Assert 结构 |
+| 嵌进 WinForms/服务 | 抄 `Program.cs` 里 Build 段到你的启动代码 | IndustryKit Client 整包 |
+
+---
+
+## Handler 铁律（复制 Extension 时必守）
+
+| 规则 | 做法 | 反例（产线灾难） |
+|------|------|------------------|
+| 限值 fail-closed | `ArgsOnly` + `TryRequire*` | `context.Get` / `All` 静默兜底 |
+| 写流程变量 | `args.SetShared` | Handler 内 `Variables.Set` |
+| 读前序状态 | `GetFlowString` / `VariablesOnly` | `All` 误读 Global |
+| 合格判定 | JSON `Assert` | Handler 内 `if (x > limit)` |
+
+---
+
+## showcase vs verify（别搞混）
+
+| | showcase | verify |
+|---|----------|--------|
+| **给谁** | 客户开发者、产品演示 | CI / 发版维护者 |
+| **条数** | 5 条，**全部期望 PASS** | 7 条，含 **2 条必须 FAIL** |
+| **命令** | `showcase` | `verify` 或 `verify.sh` |
+| **能否替代** | — | showcase **不能**替代 verify |
+
+---
+
+## CI / 维护者
+
+```bash
+./demos/IndustryKit/verify.sh   # 须输出 INDUSTRY_KIT_VERIFY_PASS
+```
+
+真值源：`VerificationCatalog.cs`。规范见 [docs/004](../../docs/004_行业扩展模板与使用场景_2026-09-12.md) · [docs/007](../../docs/007_验收门禁与测试指南_2026-09-12.md)。
+
+---
 
 ## 与 ConsoleApp 关系
 
-- 官方场景库在私有仓 `ZL.Gear.Demos` · `ZL.Gear.ConsoleApp/Scenarios/`（含 `Industry_PCBA_*` 等）。  
-- 本 Kit 是 **可复制的第二宿主模板**（扩展缝 + 客户端验证），不替代主场景库。
+- 官方全栈场景库在私有仓 `ZL.Gear.Demos`。  
+- IndustryKit 是 **MIT 公开、可复制的第二宿主**，专门降低「第一次集成 ZL.Gear」的认知门槛。
