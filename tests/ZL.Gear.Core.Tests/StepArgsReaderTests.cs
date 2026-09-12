@@ -1,0 +1,367 @@
+using NUnit.Framework;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using ZL.Gear.Core.Devices.Abstractions;
+using ZL.Gear.Core.Models;
+
+namespace ZL.Gear.Core.Tests
+{
+    [TestFixture]
+    public class StepArgsReaderTests
+    {
+        private StepConfig _step;
+        private StepContext _context;
+
+        private class ServiceProviderStub : IServiceProvider
+        {
+            public object GetService(Type serviceType) => null;
+        }
+
+        [SetUp]
+        public void Setup()
+        {
+            _step = new StepConfig
+            {
+                StepKey = "TEST-001",
+                Command = "ApplyRecipe",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "RecipeId", "R001" },
+                    { "LimitOhm", 100.0 },
+                    { "SimulatedOhm", 50.0 }
+                }
+            };
+
+            var variables = new ContextVariableStore();
+            variables.SetShared("RecipeId", "R-VAR-001");
+            variables.SetShared("LimitOhm", 200.0);
+
+            var globalContext = new Dictionary<string, object>
+            {
+                { "Barcode", "BAR-001" },
+                { "Model", "MODEL-A" }
+            };
+
+            _context = new StepContext(
+                stepKey: _step.StepKey,
+                stepCfg: _step,
+                activeDevices: new Dictionary<string, IDevice>(),
+                serviceProvider: new ServiceProviderStub(),
+                token: CancellationToken.None,
+                runTestMode: RunTestMode.Auto,
+                variables: variables,
+                globalContext: globalContext
+            );
+        }
+
+        #region ArgsOnly
+
+        [Test]
+        public void TryRequireString_ArgsOnly_存在时返回成功()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("R001", value);
+            Assert.IsNull(error);
+        }
+
+        [Test]
+        public void TryRequireString_ArgsOnly_不存在时返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NonExist", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("缺少必填 Args 参数 'NonExist'"));
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_ArgsOnly_正数时返回成功()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequirePositiveDouble("LimitOhm", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(100.0, value);
+            Assert.IsNull(error);
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_ArgsOnly_负数时返回失败()
+        {
+            _step.Parameters["LimitOhm"] = -10.0;
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequirePositiveDouble("LimitOhm", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("须为正数"));
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_ArgsOnly_零时返回失败()
+        {
+            _step.Parameters["LimitOhm"] = 0.0;
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequirePositiveDouble("LimitOhm", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("须为正数"));
+        }
+
+        #endregion
+
+        #region ArgsThenVariables
+
+        [Test]
+        public void TryRequireString_ArgsThenVariables_Args存在时取Args()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsThenVariables, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("R001", value); // Args 优先
+        }
+
+        [Test]
+        public void TryRequireString_ArgsThenVariables_Args不存在时取Variables()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsThenVariables, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("R001", value); // Args 存在，取 Args
+        }
+
+        [Test]
+        public void TryRequireString_ArgsThenVariables_都不存在时返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NonExist", StepArgSource.ArgsThenVariables, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("未找到参数或变量 'NonExist'"));
+        }
+
+        #endregion
+
+        #region All
+
+        [Test]
+        public void TryGetString_All_能读取Global()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("Barcode", StepArgSource.All, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("BAR-001", value);
+        }
+
+        [Test]
+        public void TryGetString_All_requireArgKey时缺失返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NonExist", StepArgSource.All, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("未找到参数或变量 'NonExist'"));
+        }
+
+        #endregion
+
+        #region VariablesOnly
+
+        [Test]
+        public void TryRequireString_VariablesOnly_读取流程变量()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.VariablesOnly, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("R-VAR-001", value); // Variables 中的值
+        }
+
+        [Test]
+        public void TryRequireString_VariablesOnly_不存在时返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NonExist", StepArgSource.VariablesOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("未找到流程变量 'NonExist'"));
+        }
+
+        #endregion
+
+        #region GlobalOnly
+
+        [Test]
+        public void TryRequireString_GlobalOnly_读取全局变量()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("Barcode", StepArgSource.GlobalOnly, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual("BAR-001", value);
+        }
+
+        [Test]
+        public void TryRequireString_GlobalOnly_不存在时返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NonExist", StepArgSource.GlobalOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("未找到 GlobalContext 键 'NonExist'"));
+        }
+
+        #endregion
+
+        #region SetShared / GetFlowString
+
+        [Test]
+        public void SetShared_写入流程变量_后继可读()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            reader.SetShared("OutputKey", "VALUE-123");
+
+            var value = reader.GetFlowString("OutputKey");
+            Assert.AreEqual("VALUE-123", value);
+        }
+
+        [Test]
+        public void GetFlowString_不存在时返回默认值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetFlowString("NonExist", "DEFAULT");
+
+            Assert.AreEqual("DEFAULT", value);
+        }
+
+        #endregion
+
+        #region GetGlobalString
+
+        [Test]
+        public void GetGlobalString_读取全局条码()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetGlobalString("Barcode");
+
+            Assert.AreEqual("BAR-001", value);
+        }
+
+        [Test]
+        public void GetGlobalString_不存在时返回默认值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetGlobalString("NonExist", "DEFAULT");
+
+            Assert.AreEqual("DEFAULT", value);
+        }
+
+        #endregion
+
+        #region GetOptionalDouble / GetOptionalString
+
+        [Test]
+        public void GetOptionalDouble_存在时返回值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetOptionalDouble("LimitOhm", 0.0);
+
+            Assert.AreEqual(100.0, value);
+        }
+
+        [Test]
+        public void GetOptionalDouble_不存在时返回默认值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetOptionalDouble("NonExist", 0.0);
+
+            Assert.AreEqual(0.0, value);
+        }
+
+        [Test]
+        public void GetOptionalString_存在时返回值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetOptionalString("RecipeId", "DEFAULT");
+
+            Assert.AreEqual("R001", value);
+        }
+
+        #endregion
+
+        #region TryGetDouble
+
+        [Test]
+        public void TryGetDouble_能解析整数()
+        {
+            _step.Parameters["IntValue"] = 42;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("IntValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(42.0, value);
+        }
+
+        [Test]
+        public void TryGetDouble_无法解析时返回失败()
+        {
+            _step.Parameters["BadValue"] = "not-a-number";
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("BadValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("无法解析为数值"));
+        }
+
+        [Test]
+        public void TryGetDouble_NaN时返回失败()
+        {
+            _step.Parameters["NanValue"] = double.NaN;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("NanValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("数值非法"));
+        }
+
+        #endregion
+
+        #region Fail
+
+        [Test]
+        public void Fail_返回失败结果()
+        {
+            var result = StepArgsReader.Fail("测试失败");
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("测试失败", result.Message);
+        }
+
+        #endregion
+
+        #region 类型转换
+
+        [Test]
+        public void TryToDouble_支持多种数值类型()
+        {
+            // 这些测试通过 TryGetDouble 间接覆盖
+            _step.Parameters["FloatValue"] = 3.14f;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("FloatValue", StepArgSource.ArgsOnly, out var value, out _);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(3.14, value, 0.01);
+        }
+
+        #endregion
+    }
+}

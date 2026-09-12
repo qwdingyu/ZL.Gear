@@ -14,7 +14,9 @@ bash scripts/public-guard.sh
 echo "[1/6] dotnet build ZL.Gear.sln ..."
 dotnet build ZL.Gear.sln -c Release -v q
 
-echo "[2/6] Extensions.Data 单元测试 ..."
+echo "[2/6] 公开轨单元测试 (Core + Engine + Extensions.Data) ..."
+dotnet test tests/ZL.Gear.Core.Tests/ZL.Gear.Core.Tests.csproj -c Release -v q --no-build
+dotnet test tests/ZL.Gear.Engine.Tests/ZL.Gear.Engine.Tests.csproj -c Release -v q --no-build
 dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q --no-build
 
 echo "[3/6] IndustryKit verify (零 bypass) ..."
