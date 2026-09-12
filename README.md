@@ -8,8 +8,18 @@
 
 ```bash
 dotnet build ZL.Gear.sln
-bash check_release_public.sh   # 含 scripts/public-guard.sh (G0)
+bash check_release_public.sh   # 含 scripts/public-guard.sh (G0) + pack 校验
 ```
+
+### NuGet（轨道 A · MIT）
+
+```bash
+dotnet add package ZL.Gear.Core
+dotnet add package ZL.Gear.Engine    # LogicOnly；Instrumented 驱动在私有 ZL.Gear.Drivers
+# 可选：ZL.Gear.Abstractions · ZL.Gear.Sensing · ZL.Gear.Extensions.Data
+```
+
+发布：打 tag `vX.Y.Z` 触发 [`.github/workflows/publish.yml`](.github/workflows/publish.yml)（参考 ZL.PlcBase，**不混淆**）。
 
 全栈私有回归（ConsoleApp + Drivers）在 sibling 仓 **`ZL.Gear.Demos/check_release.sh`**（Gear.All 工作区）。
 

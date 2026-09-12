@@ -12,6 +12,8 @@
 | `check_release_public.sh` | 公开轨质量门（不含 Drivers/Demos） |
 | `scripts/public-guard.sh` | G0 边界静态门禁 |
 | `.github/workflows/public-ci.yml` | GitHub Actions 公开轨 CI |
+| `.github/workflows/publish.yml` | NuGet 发布（tag `v*` / 手动；**无混淆**） |
+| `pipeline.json` | 发布清单（5 包 · `obfuscate: false`） |
 | `demos/IndustryKit/` | MIT 教学模板（仅引 Core/Engine） |
 | `tools/ExprDialectProof` | 表达式方言门禁 |
 | `LICENSE` | MIT（公开轨 G0-8） |

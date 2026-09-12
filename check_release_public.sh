@@ -20,7 +20,7 @@ dotnet test tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.cs
 echo "[3/5] IndustryKit verify (零 bypass) ..."
 bash demos/IndustryKit/verify.sh
 
-echo "[4/5] ExprDialectProof ..."
+echo "[4/6] ExprDialectProof ..."
 dotnet build tools/ExprDialectProof/ExprDialectProof.csproj -c Release -v q
 PROOF_OUT="$(dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release --no-build 2>&1)"
 echo "$PROOF_OUT" | tail -n 5
@@ -29,5 +29,17 @@ echo "$PROOF_OUT" | grep -q "PROOF_ALL_PASS" || {
   exit 5
 }
 
-echo "[5/5] 完成"
+PACK_DIR="$(mktemp -d)"
+trap 'rm -rf "$PACK_DIR"' EXIT
+echo "[5/6] dotnet pack (5 NuGet packages, no obfuscation) ..."
+dotnet pack ZL.Gear.sln -c Release -o "$PACK_DIR" --no-build -v q
+PKG_COUNT="$(find "$PACK_DIR" -maxdepth 1 -name '*.nupkg' | wc -l | tr -d ' ')"
+if [ "$PKG_COUNT" != "5" ]; then
+  echo "❌ 期望 5 个 .nupkg，实际 $PKG_COUNT"
+  ls -la "$PACK_DIR" || true
+  exit 6
+fi
+echo "  ✓ $(basename "$PACK_DIR"/*.nupkg 2>/dev/null | head -5 | tr '\n' ' ')"
+
+echo "[6/6] 完成"
 echo "✅ 公开轨质量门通过"

@@ -4,6 +4,9 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>11.0</LangVersion>
     <Nullable>disable</Nullable>
+    <AssemblyName>ZL.Gear.Extensions.Data</AssemblyName>
+    <RootNamespace>ZL.Gear.Extensions.Data</RootNamespace>
+    <Description>Gear.NET data extensions: CSV/Excel helpers and structured data utilities for workflows.</Description>
   </PropertyGroup>
 
   <ItemGroup>
