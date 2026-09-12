@@ -1,0 +1,17 @@
+<Project>
+  <!-- src/ 下框架 DL：可发布 NuGet（轨道 A · docs/001） -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>$(AssemblyName)</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/qwdingyu/ZL.Gear</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/qwdingyu/ZL.Gear.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>gear;industrial;automation;workflow;orchestration</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" Condition="Exists('..\..\README.md')" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Link="LICENSE" Condition="Exists('..\..\LICENSE')" />
+  </ItemGroup>
+</Project>

@@ -64,8 +64,16 @@ _ReSharper*/
 .vscode/
 
 # === 五仓分仓：已迁私有仓，本地联调保留但不入库（ZL.Gear.Docs/167）===
-docs/**
+# 公开轨保留 docs/README.md 与公开指南；私有仓编号文档 028-167 不入本仓
+docs/*.md
 !docs/README.md
+!docs/001_*.md
+!docs/002_*.md
+!docs/003_*.md
+!docs/004_*.md
+!docs/005_*.md
+!docs/006_*.md
+!docs/007_*.md
 demos/SeatDemo/
 demos/InstrumentTest/
 tests/ZL.Gear.PerformanceTests/
