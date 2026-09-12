@@ -104,7 +104,7 @@ fi
 
 # 7. Extensions.Data 回归（docs/141 G-04；Tests 已在 sln，本步为 Release 专项 + SQLite 包还原）
 echo "[7/${TOTAL_STEPS}] 正在运行 Extensions.Data.Tests..."
-dotnet test ./src/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q
+dotnet test ./tests/ZL.Gear.Extensions.Data.Tests/ZL.Gear.Extensions.Data.Tests.csproj -c Release -v q
 if [ $? -ne 0 ]; then
     echo "❌ Extensions.Data.Tests 未通过！"
     exit 8

@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Sensing", "src\ZL.Gear.Sensing\ZL.Gear.Sensing.csproj", "{00EBF65D-69B2-45D6-E273-DAD2B42A910A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data.Tests", "src\ZL.Gear.Extensions.Data.Tests\ZL.Gear.Extensions.Data.Tests.csproj", "{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZL.Gear.Extensions.Data.Tests", "tests\ZL.Gear.Extensions.Data.Tests\ZL.Gear.Extensions.Data.Tests.csproj", "{5E4BC328-57DE-4DA1-A6FA-6BFBD44F493A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "demos", "demos", "{FA8A28C8-4B59-8028-2ACF-626D05B08DB7}"
 EndProject
