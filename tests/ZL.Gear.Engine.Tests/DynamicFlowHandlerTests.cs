@@ -9,6 +9,7 @@ using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine;
+using ZL.Gear.Testing.Common;
 
 namespace ZL.Gear.Engine.Tests
 {
@@ -30,9 +31,9 @@ namespace ZL.Gear.Engine.Tests
                     ExecutionResult.Succeeded($"[Action] {key}")));
 
             _mockResolver.Setup(r => r.ResolveMeasurement(It.IsAny<string>()))
-                .Returns<string>(key => (s, c) => Task.FromResult(Measurement.Succeeded(key, 42.0, "", "")));
+                .Returns<string>(key => (s, c) => Task.FromResult(Measurement.Succeeded(key, 42.0)));
 
-            _context = TestStepContextFactory.Create(_mockResolver.Object);
+            _context = StepContextFactory.CreateWithActionResolver(_mockResolver.Object);
         }
 
         #region ExecuteAsync - JSON 解析失败
@@ -368,6 +369,206 @@ namespace ZL.Gear.Engine.Tests
 
             Assert.IsFalse(result.Success);
             Assert.That(result.Message, Does.Contain("取消").Or.Contain("超时"));
+        }
+
+        #endregion
+
+        #region 失败路径与边界（补充）
+
+        [Test]
+        public async Task ExecuteAsync_Delay被取消_返回失败()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var flowJson = new JObject
+            {
+                ["Sequence"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Id"] = "d1",
+                        ["Type"] = "Delay",
+                        ["DelayMs"] = 1000,
+                        ["Description"] = "等待"
+                    }
+                }
+            };
+
+            var step = new StepConfig
+            {
+                StepKey = "WF-001",
+                Command = "DynamicFlow",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "WorkflowDefinition", flowJson }
+                }
+            };
+
+            var childContext = _context.WithToken(cts.Token);
+            var result = await _handler.ExecuteAsync(step, childContext);
+
+            Assert.IsFalse(result.Success);
+            Assert.That(result.Message, Does.Contain("取消"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_中间Action失败_后续节点短路()
+        {
+            var callCount = 0;
+            _mockResolver.Setup(r => r.ResolveAction("FailAction"))
+                .Returns<string>(_ => (s, c) =>
+                {
+                    callCount++;
+                    return Task.FromResult<ExecutionResultBase>(ExecutionResult.Failed("故意失败"));
+                });
+            _mockResolver.Setup(r => r.ResolveAction("AfterFail"))
+                .Returns<string>(_ => (s, c) =>
+                {
+                    callCount++;
+                    return Task.FromResult<ExecutionResultBase>(ExecutionResult.Succeeded());
+                });
+
+            var flowJson = new JObject
+            {
+                ["Sequence"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Id"] = "node1",
+                        ["Type"] = "Action",
+                        ["ActionKey"] = "FailAction",
+                        ["Description"] = "失败动作"
+                    },
+                    new JObject
+                    {
+                        ["Id"] = "node2",
+                        ["Type"] = "Action",
+                        ["ActionKey"] = "AfterFail",
+                        ["Description"] = "后续动作"
+                    }
+                }
+            };
+
+            var step = new StepConfig
+            {
+                StepKey = "WF-001",
+                Command = "DynamicFlow",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "WorkflowDefinition", flowJson }
+                }
+            };
+
+            var result = await _handler.ExecuteAsync(step, _context);
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual(1, callCount);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_Measure失败_不记录测量()
+        {
+            _mockResolver.Setup(r => r.ResolveMeasurement("BadMeasure"))
+                .Returns<string>(_ => (s, c) => Task.FromResult<Measurement<string>.Failed("BadMeasure", "超压")));
+
+            var flowJson = new JObject
+            {
+                ["Sequence"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Id"] = "m1",
+                        ["Type"] = "Measure",
+                        ["ActionKey"] = "BadMeasure",
+                        ["Description"] = "坏测量"
+                    }
+                }
+            };
+
+            var step = new StepConfig
+            {
+                StepKey = "WF-001",
+                Command = "DynamicFlow",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "WorkflowDefinition", flowJson }
+                }
+            };
+
+            var result = await _handler.ExecuteAsync(step, _context);
+
+            Assert.IsFalse(result.Success);
+            Assert.That(result.Message, Does.Contain("超压"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_Condition非法表达式_跳过节点()
+        {
+            var flowJson = new JObject
+            {
+                ["Sequence"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Id"] = "node1",
+                        ["Type"] = "Action",
+                        ["ActionKey"] = "ShouldSkip",
+                        ["Condition"] = "NonExist == true",
+                        ["Description"] = "条件分支"
+                    }
+                }
+            };
+
+            var step = new StepConfig
+            {
+                StepKey = "WF-001",
+                Command = "DynamicFlow",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "WorkflowDefinition", flowJson }
+                }
+            };
+
+            var result = await _handler.ExecuteAsync(step, _context);
+
+            Assert.IsTrue(result.Success);
+            _mockResolver.Verify(r => r.ResolveAction("ShouldSkip"), Times.Never);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WaitUntil超时_返回失败()
+        {
+            var flowJson = new JObject
+            {
+                ["Sequence"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["Id"] = "w1",
+                        ["Type"] = "WaitUntil",
+                        ["Condition"] = "NeverReady == true",
+                        ["Description"] = "等待",
+                        ["TimeoutMs"] = 50,
+                        ["IntervalMs"] = 10
+                    }
+                }
+            };
+
+            var step = new StepConfig
+            {
+                StepKey = "WF-001",
+                Command = "DynamicFlow",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "WorkflowDefinition", flowJson }
+                }
+            };
+
+            var result = await _handler.ExecuteAsync(step, _context);
+
+            Assert.IsFalse(result.Success);
+            Assert.That(result.Message, Does.Contain("等待超时"));
         }
 
         #endregion

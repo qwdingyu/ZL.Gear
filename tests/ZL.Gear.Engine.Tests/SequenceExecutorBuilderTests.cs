@@ -128,12 +128,11 @@ namespace ZL.Gear.Engine.Tests
         #region Build 门禁 - Instrumented 约束
 
         [Test]
-        public void Build_Instrumented_无DeviceService_抛出异常()
+        public void Build_Instrumented_有DeviceService_通过()
         {
             var builder = SequenceExecutorBuilder.Create()
                 .AsInstrumentedHost(new Mock<IDeviceService>().Object);
 
-            // 正常应该通过
             Assert.DoesNotThrow(() => builder.Build());
         }
 
