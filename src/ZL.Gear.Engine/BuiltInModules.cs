@@ -46,7 +46,7 @@ namespace ZL.Gear.Engine
         Ai = 8,
 
         /// <summary>
-        /// 电检整机默认包：Core | Sensing | Plc | Ai（对齐历史一次全挂）。
+        /// Instrumented 全模块默认包：Core | Sensing | Plc | Ai。
         /// </summary>
         All = Core | Sensing | Plc | Ai
     }

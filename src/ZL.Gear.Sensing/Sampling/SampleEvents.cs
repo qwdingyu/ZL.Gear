@@ -6,7 +6,7 @@ namespace ZL.Gear.Sensing
 {
     /// <summary>
     /// 宿主 Bootstrap 注册通道采样请求器；Handler 通过通道名请求 <see cref="ISamplingSession{T}"/>。
-    /// legacy NoiseService 向 <see cref="SessionRequesters"/> 注入 "Noise" 通道。
+    /// 宿主 Bootstrap 注册通道示例：如 <c>SessionRequesters["Noise"] = …</c>。
     /// </summary>
     public class SampleEvents
     {

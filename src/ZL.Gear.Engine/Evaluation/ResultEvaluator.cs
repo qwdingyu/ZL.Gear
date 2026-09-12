@@ -166,7 +166,7 @@ namespace ZL.Gear.Engine.Evaluation
                 // 根据模式分发到不同的处理逻辑
                 switch (mode)
                 {
-                    // --- 1. 数值类 (电检核心) ---
+                    // --- 1. 数值判定 ---
                     case "range":
                     case "equals":
                     case "lcl_only":

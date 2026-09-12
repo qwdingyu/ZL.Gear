@@ -7,7 +7,7 @@ using ZL.Gear.Core.Utils;
 namespace ZL.Gear.Engine.Runner
 {
     /// <summary>
-    /// StepConfig 归一化工具（对齐盐城 legacy 行为 + 公开仓扩展）。
+    /// StepConfig 归一化工具（Parameters legacy 桥接 + 公开仓扩展）。
     /// 职责：TargetDict、DurationMs、EvaluateResult 桥接、LCL/UCL/Offset → ExpectedResults、递归 SubSteps。
     /// </summary>
     public static class StepConfigNormalizer

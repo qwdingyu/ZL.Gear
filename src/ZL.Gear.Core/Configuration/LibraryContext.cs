@@ -60,7 +60,7 @@ namespace ZL.Gear.Core.Configuration
 
         public string GetDefaultLibrary()
         {
-            // 对于电检项目，通常列表第一个即为默认，或者后续可从 appsettings 读取
+            // 默认库：列表首项，或后续由 appsettings 指定
             return AvailableLibraries.FirstOrDefault(); 
         }
     }

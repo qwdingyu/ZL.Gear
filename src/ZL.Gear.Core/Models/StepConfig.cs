@@ -336,7 +336,7 @@ namespace ZL.Gear.Core.Models
             return clone;
         }
 
-        /// <summary>legacy 座椅 Handler 兼容别名。</summary>
+        /// <summary>深拷贝别名（legacy Handler 兼容）。</summary>
         public StepConfig DeepClone() => (StepConfig)Clone();
     }
 }

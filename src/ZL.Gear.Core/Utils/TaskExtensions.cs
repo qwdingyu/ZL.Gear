@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZL.Gear.Core.Utils
@@ -30,6 +28,21 @@ namespace ZL.Gear.Core.Utils
             // 如果先完成的是原始 task，我们需要 `await` 它来传播可能发生的异常。
             // 此时因为它已经完成，所以 await 会立即返回。
             await task;
+        }
+
+        /// <summary>
+        /// CancellationToken → Task 桥接，便于参与 Task.WhenAny。
+        /// </summary>
+        public static Task AsTask(this CancellationToken token)
+        {
+            if (!token.CanBeCanceled)
+            {
+                return Task.Delay(Timeout.Infinite, CancellationToken.None);
+            }
+
+            var tcs = new TaskCompletionSource<object>();
+            token.Register(() => tcs.TrySetCanceled(token));
+            return tcs.Task;
         }
     }
 }

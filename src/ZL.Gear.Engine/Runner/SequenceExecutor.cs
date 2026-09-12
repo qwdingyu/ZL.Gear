@@ -248,7 +248,7 @@ namespace ZL.Gear.Engine.Runner
                             RunTestMode.Auto, sharedData, globalContext, null, _log);
 
                         // 注入点：调用 BindProfile 将 Profile 中的映射应用到 Step 配置中
-                        // deviceRoles 通常是从 SeatProfile.json 加载的 IDictionary<string, object>
+                        // deviceRoles 通常来自 DeviceProfile / 宿主 deviceRoles 映射
                         // 为了匹配 BindProfile 的签名 IDictionary<string, string>，我们做一下转换
                         var profileStrDict = deviceRoles.ToDictionary(k => k.Key, v => v.Value?.ToString());
                         
@@ -332,7 +332,6 @@ namespace ZL.Gear.Engine.Runner
             var sw = Stopwatch.StartNew();
             stepResult.StartTime = DateTime.Now;
             stepResult.Status = StepExecutionStatus.Running;
-            //本项目中仅限于用于PLC在SBR测试中加压负载完成通知 测试步骤测试电流   ？？？？？  不要有并行的主步骤，否则会错乱
             // LegacyBridge.RunnerEvents.StepStarted?.Invoke(context); // 逐步废弃
             _eventBus.Publish(new StepProgressEvent(stepResult));
             _log($"[执行] {stepConfig.StepName}...");
