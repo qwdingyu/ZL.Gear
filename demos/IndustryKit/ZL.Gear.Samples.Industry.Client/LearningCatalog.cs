@@ -29,7 +29,7 @@ namespace ZL.Gear.Samples.Industry.Client
             new LearningStep(1, "最短合格工位", "Station_HappyPath.json",
                 "行业三步 + Calculate + Assert；先看 OverallSuccess 怎么闭环"),
             new LearningStep(2, "框架内核橱窗", "Gear_Core_Showcase.json",
-                "Parallel/Retry/WaitUntil/Finally；L1 Check + L0 Left/Op/Right"),
+                "Parallel/Retry/WaitUntil/Finally/节点级 Condition；L1 Check + L0 Left/Op/Right"),
             new LearningStep(3, "Assert L2 Condition", "Gear_Assert_L2_Condition.json",
                 "第三种 Assert 方言：Condition 布尔或表达式（docs/006）"),
             new LearningStep(4, "Args 覆盖 fail-closed", "Station_ProbeOverride.json",

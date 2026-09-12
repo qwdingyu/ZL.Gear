@@ -37,10 +37,10 @@ namespace ZL.Gear.Samples.Industry.Client
                 "Station_HappyPath.json",
                 "ExecuteAsync 注入；MarkComplete 日志回显"),
             new CapabilityEntry(
-                "控制流：Parallel / Group / Sequence / Retry / Delay",
+                "控制流：Parallel / Group / Sequence / Retry / Delay / 节点级 Condition / 节点级 Finally",
                 "L-DSL / Engine",
                 "Gear_Core_Showcase.json",
-                "并行支路、分组、重试与双 Delay 形态"),
+                "并行支路、分组、重试、双 Delay 形态、节点级条件守卫与节点级清理"),
             new CapabilityEntry(
                 "WaitUntil 轮询 + SetVariable",
                 "L-DSL / Engine",

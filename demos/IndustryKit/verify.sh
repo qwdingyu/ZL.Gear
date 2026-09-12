@@ -18,7 +18,12 @@ echo "[IndustryKit] build..."
 dotnet build demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj -c Release -v q
 
 echo "[IndustryKit] verify..."
-OUT="$(dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj -c Release --no-build -- verify)"
+# dotnet run 非零退出时不得静默死亡（set -e）：打印诊断后显式失败
+OUT="$(dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client/ZL.Gear.Samples.Industry.Client.csproj -c Release --no-build -- verify 2>&1)" || {
+  echo "❌ verify 运行失败（dotnet run 非零退出）" >&2
+  echo "$OUT" | tail -n 30
+  exit 1
+}
 echo "$OUT" | tail -n 20
 echo "$OUT" | grep -q "INDUSTRY_KIT_VERIFY_PASS"
 echo "[IndustryKit] OK"

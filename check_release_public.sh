@@ -25,7 +25,12 @@ bash demos/IndustryKit/verify.sh
 
 echo "[4/6] ExprDialectProof ..."
 dotnet build tools/ExprDialectProof/ExprDialectProof.csproj -c Release -v q
-PROOF_OUT="$(dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release --no-build 2>&1)"
+# dotnet run 非零退出时不得静默死亡（set -e）：打印诊断后显式失败
+PROOF_OUT="$(dotnet run --project tools/ExprDialectProof/ExprDialectProof.csproj -c Release --no-build 2>&1)" || {
+  echo "❌ ExprDialectProof 运行失败（dotnet run 非零退出）"
+  echo "$PROOF_OUT" | tail -n 30
+  exit 5
+}
 echo "$PROOF_OUT" | tail -n 5
 echo "$PROOF_OUT" | grep -q "PROOF_ALL_PASS" || {
   echo "❌ ExprDialectProof 未输出 PROOF_ALL_PASS"

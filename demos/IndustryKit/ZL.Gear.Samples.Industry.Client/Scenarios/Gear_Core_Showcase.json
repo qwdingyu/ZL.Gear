@@ -1,7 +1,7 @@
 {
   "StepKey": "Gear_Core_Showcase",
   "StepName": "【IndustryKit】Gear 框架内核橱窗（无行业 Handler）",
-  "Description": "L-DSL 一站演示：Calculate 裸标识符；Assert L1+L0；Parallel/Group/Sequence/Retry/Delay/WaitUntil/Finalizers/${插值}。",
+  "Description": "L-DSL 一站演示：Calculate 裸标识符；Assert L1+L0；Parallel/Group/Sequence/Retry/Delay/WaitUntil/Finalizers/${插值}；节点级 Condition 守卫；节点级 Finally。",
   "Command": "DynamicFlow",
   "EvaluateResult": false,
   "TimeoutMs": 60000,
@@ -14,7 +14,8 @@
       "Variables": {
         "LimitOhm": 5.0,
         "Ready": false,
-        "MaxLeakage": 5.0
+        "MaxLeakage": 5.0,
+        "SkipMe": false
       },
       "Finalizers": [
         {
@@ -152,6 +153,33 @@
               "Description": "Sequence 内日志",
               "ActionKey": "Log",
               "Args": { "Message": "[Sequence] nested OK" }
+            }
+          ]
+        },
+        {
+          "Type": "Action",
+          "Description": "节点级 Condition 守卫（构建期按初始变量裁决）：SkipMe=false → 本节点被跳过",
+          "ActionKey": "Log",
+          "Condition": "SkipMe == true",
+          "Args": { "Message": "[CondGuard] SKIP-ME 不应出现（守卫未生效）" }
+        },
+        {
+          "Type": "Action",
+          "Description": "节点级 Condition 守卫：LimitOhm>0 成立 → 本节点执行",
+          "ActionKey": "Log",
+          "Condition": "LimitOhm > 0",
+          "Args": { "Message": "[CondGuard] LimitOhm>0 成立，该节点已执行" }
+        },
+        {
+          "Type": "Action",
+          "Description": "节点级 Finally（随本节点注册清理，无论成败）",
+          "ActionKey": "Log",
+          "Args": { "Message": "[NodeFinally] 主体 Log 完成" },
+          "Finally": [
+            {
+              "Type": "Action",
+              "ActionKey": "Log",
+              "Args": { "Message": "[NodeFinally] 随节点注册的清理已执行（与工作流 Finalizers 同 LIFO）" }
             }
           ]
         },

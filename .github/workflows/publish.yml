@@ -9,9 +9,9 @@ name: Publish to NuGet
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version (e.g. 1.0.1)'
+        description: 'Package version（默认对齐 Directory.Build.props 的 1.0.0）'
         required: true
-        default: '1.0.1'
+        default: '1.0.0'
       dry-run:
         description: 'Dry run (pack only, no push)'
         type: boolean

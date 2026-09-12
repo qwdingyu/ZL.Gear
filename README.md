@@ -150,7 +150,7 @@ dotnet run --project demos/IndustryKit/ZL.Gear.Samples.Industry.Client -c Releas
 
 ## 版本
 
-当前公开轨 **v1.0.1**（MIT）。完整产线功能（Instrumented 驱动、HSL/VISA/Mock、ConsoleApp 全栈场景）位于 **私有仓** `ZL.Gear.Drivers` / `ZL.Gear.Demos`。
+当前公开轨 **v1.0.0**（MIT）。完整产线功能（Instrumented 驱动、HSL/VISA/Mock、ConsoleApp 全栈场景）位于 **私有仓** `ZL.Gear.Drivers` / `ZL.Gear.Demos`。
 
 ---
 

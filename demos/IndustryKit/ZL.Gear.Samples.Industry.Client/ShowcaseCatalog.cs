@@ -26,7 +26,7 @@ namespace ZL.Gear.Samples.Industry.Client
             new ShowcaseItem(
                 "① 框架内核橱窗（无行业 Handler 也可跑）",
                 "Gear_Core_Showcase.json",
-                "Calculate / Assert / Parallel / Retry / WaitUntil / Finally"),
+                "Calculate / Assert / Parallel / Retry / WaitUntil / 节点级 Condition 守卫 / Finally"),
             new ShowcaseItem(
                 "② 标准工位合格路径",
                 "Station_HappyPath.json",

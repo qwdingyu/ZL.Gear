@@ -42,12 +42,15 @@
 # G0-4：IndustryKit 零 bypass（无 ZL_LICENSE_* / ZL_GEAR_LICENSE_*）
 env -i PATH="$PATH" HOME="$HOME" bash demos/IndustryKit/verify.sh
 
-# G0-6：无 Drivers/HSL
+# G0-6：无 Drivers/Exts/HSL
 ! rg -l HslCommunication --glob '*.csproj' .
 ! rg -l 'ZL\.Gear\.Drivers' --glob '*.csproj' .
+! rg -l 'ZL\.Gear\.Exts|ZL\.Gear\.Ext\.' --glob '*.csproj' .
 test ! -d ZL.Gear.Drivers
+test ! -d ZL.Gear.Exts
+# IndustryKit 不得 using / ProjectReference 私有 Drivers/Exts（见 scripts/public-guard.sh G0-6b）
 
-# G0-7：IndustryKit verify 依赖的 7 JSON + 3 Client 源文件须 git 跟踪
+# G0-7：IndustryKit verify 依赖的源码/场景/脚本文件须全部 git 跟踪（清单见 scripts/public-guard.sh G0-7）
 bash scripts/public-guard.sh   # 内含 G0-7
 
 # G0-5
