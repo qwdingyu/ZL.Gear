@@ -55,5 +55,22 @@ namespace ZL.Gear.Sensing.Tests
             var samples = new List<double> { 2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0 };
             Assert.AreEqual(2.13809, calculator.Calculate(samples), 0.001);
         }
+
+        [Test]
+        public void AverageCalculator_空列表_返回默认值()
+        {
+            var calculator = new AverageCalculator<double>();
+            var samples = new List<double>();
+            Assert.AreEqual(0.0, calculator.Calculate(samples));
+        }
+
+        [Test]
+        public void StdDevCalculator_单元素_返回默认值()
+        {
+            var calculator = new StdDevCalculator<double>();
+            var samples = new List<double> { 1.0 };
+            Assert.AreEqual(0.0, calculator.Calculate(samples), 0.001);
+        }
+
     }
 }

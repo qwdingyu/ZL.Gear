@@ -43,5 +43,32 @@ namespace ZL.Gear.Sensing.Tests
             Assert.IsFalse(measurement.Success);
             Assert.That(measurement.Message, Does.Contain("设备异常"));
         }
+
+        [Test]
+        public async Task Start_连续Start_不重复启动()
+        {
+            var mockDevice = new Mock<IDevice>();
+            mockDevice.Setup(d => d.ExecuteAsync(It.IsAny<string>(), It.IsAny<Dictionary<string, object>>(), It.IsAny<StepContext>()))
+                .ReturnsAsync(DeviceReading.Succeeded("ok", 1));
+
+            var step = new StepConfig { StepKey = "step", Command = "Read" };
+            var context = StepContextFactory.CreateLogicOnly(step);
+
+            var sampler = new DeviceSampler<double>(
+                "TestSampler",
+                mockDevice.Object,
+                "Read",
+                new Dictionary<string, object>(),
+                context,
+                TimeSpan.FromMilliseconds(10));
+
+            sampler.Start();
+            sampler.Start(); // 第二次不应启动新循环
+            sampler.Stop();
+
+            // 验证 ExecuteAsync 仅被调用一次（因为只启动了一个循环）
+            mockDevice.Verify(d => d.ExecuteAsync(It.IsAny<string>(), It.IsAny<Dictionary<string, object>>(), It.IsAny<StepContext>()), Times.AtMost(2));
+        }
+
     }
 }

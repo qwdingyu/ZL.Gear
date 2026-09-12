@@ -72,5 +72,51 @@ namespace ZL.Gear.Core.Tests
                 && text.IndexOf("LimitOhm\", StepArgSource.ArgsThenVariables", StringComparison.Ordinal) < 0,
                 "LimitOhm 不得用 All/ArgsThenVariables");
         }
+
+        [Test]
+        public void IndustryKit_AllHandlers_限值须ArgsOnly_无All回退()
+        {
+            var dir = GearTestPaths.IndustryKitHandlersDir(TestContext.CurrentContext.TestDirectory);
+            Assert.That(Directory.Exists(dir), Is.True, $"IndustryKit Handlers 目录不存在: {dir}");
+
+            var hits = new List<string>();
+            foreach (var file in Directory.GetFiles(dir, "*Handler.cs"))
+            {
+                var text = File.ReadAllText(file);
+                var matches = System.Text.RegularExpressions.Regex.Matches(
+                    text,
+                    @"TryRequire\w+\(\s*""([^""]+)""\s*,\s*StepArgSource\.(All|ArgsThenVariables)");
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    hits.Add($"{Path.GetFileName(file)}: {m.Groups[1].Value} 使用 {m.Groups[2].Value}");
+                }
+            }
+
+            Assert.That(hits, Is.Empty,
+                "行业 Handler 必填限值须 StepArgSource.ArgsOnly，禁止 All/ArgsThenVariables 回退：\n" + string.Join("\n", hits));
+        }
+
+        [Test]
+        public void IndustryKit_Scenarios_Parallel节点不得包含Measure子节点()
+        {
+            var dir = GearTestPaths.IndustryKitScenariosDir(TestContext.CurrentContext.TestDirectory);
+            Assert.That(Directory.Exists(dir), Is.True, $"IndustryKit Scenarios 目录不存在: {dir}");
+
+            var hits = new List<string>();
+            foreach (var file in Directory.GetFiles(dir, "*.json"))
+            {
+                var text = File.ReadAllText(file);
+                var pattern = @"\{\s*""Type""\s*:\s*""(?:Parallel|Group)""[^}]*""Children""\s*:\s*\[[^\]]*\{\s*""Type""\s*:\s*""Measure""";
+                var matches = System.Text.RegularExpressions.Regex.Matches(
+                    text, pattern, System.Text.RegularExpressions.RegexOptions.Singleline);
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    hits.Add($"{Path.GetFileName(file)}: 发现 Parallel/Group 内嵌 Measure 子节点");
+                }
+            }
+
+            Assert.That(hits, Is.Empty,
+                "DynamicFlow 并行节点 Parallel/Group 不得直接包含 Measure 子节点，须拆分为 Sequence：\n" + string.Join("\n", hits));
+        }
     }
 }

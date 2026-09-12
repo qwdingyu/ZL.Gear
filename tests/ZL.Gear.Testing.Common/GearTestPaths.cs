@@ -29,5 +29,11 @@ namespace ZL.Gear.Testing.Common
             Path.Combine(
                 FindRepoRoot(testDirectory),
                 "demos", "IndustryKit", "ZL.Gear.Extension.Station", "Handlers");
+
+        /// <summary>IndustryKit 场景 JSON 目录。</summary>
+        public static string IndustryKitScenariosDir(string testDirectory) =>
+            Path.Combine(
+                FindRepoRoot(testDirectory),
+                "demos", "IndustryKit", "ZL.Gear.Samples.Industry.Client", "Scenarios");
     }
 }

@@ -357,6 +357,197 @@ namespace ZL.Gear.Core.Tests
             Assert.That(error, Does.Contain("数值非法"));
         }
 
+        [Test]
+        public void TryGetDouble_PositiveInfinity时返回失败()
+        {
+            _step.Parameters["InfValue"] = double.PositiveInfinity;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("InfValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("数值非法"));
+        }
+
+        #endregion
+
+        #region 边界与空值（补充）
+
+        [Test]
+        public void TryRequireString_键为null_返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString(null, StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("键名为空"));
+        }
+
+        [Test]
+        public void TryRequireString_键为空字符串_返回失败()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("键名为空"));
+        }
+
+        [Test]
+        public void TryGetDouble_值为null_返回失败()
+        {
+            _step.Parameters["NullValue"] = null;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("NullValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("无法解析为数值"));
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_值为零_返回失败()
+        {
+            _step.Parameters["ZeroValue"] = 0.0;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryRequirePositiveDouble("ZeroValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("须为正数"));
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_值为负零_返回失败()
+        {
+            _step.Parameters["NegZero"] = -0.0;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryRequirePositiveDouble("NegZero", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("须为正数"));
+        }
+
+        [Test]
+        public void GetOptionalDouble_非法字符串_返回默认值()
+        {
+            _step.Parameters["BadDouble"] = "not-a-number";
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var value = reader.GetOptionalDouble("BadDouble", 99.9);
+
+            Assert.AreEqual(99.9, value);
+        }
+
+        [Test]
+        public void GetFlowString_键为null_返回默认值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetFlowString(null, "DEFAULT");
+
+            Assert.AreEqual("DEFAULT", value);
+        }
+
+        [Test]
+        public void SetShared_跨实例可读()
+        {
+            var reader1 = StepArgsReader.From(_step, _context, "Step1");
+            reader1.SetShared("CrossKey", "CROSS-VALUE");
+
+            var reader2 = StepArgsReader.From(_step, _context, "Step2");
+            var ok = reader2.TryRequireFlowString("CrossKey", out var value, out _);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("CROSS-VALUE", value);
+        }
+
+        [Test]
+        public void GetGlobalString_GlobalContext为null_返回默认值()
+        {
+            var nullGlobalContext = StepContextFactory.CreateLogicOnly(_step, _variables, globalContext: null);
+            var reader = StepArgsReader.From(_step, nullGlobalContext, "ApplyRecipe");
+            var value = reader.GetGlobalString("Barcode", "DEFAULT");
+
+            Assert.AreEqual("DEFAULT", value);
+        }
+
+        [Test]
+        public void TryRequireString_GlobalOnly_GlobalContext为null_返回失败()
+        {
+            var nullGlobalContext = StepContextFactory.CreateLogicOnly(_step, _variables, globalContext: null);
+            var reader = StepArgsReader.From(_step, nullGlobalContext, "ApplyRecipe");
+            var result = reader.TryRequireString("Barcode", StepArgSource.GlobalOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("未找到 GlobalContext 键 'Barcode'"));
+        }
+
+        [Test]
+        public void TryRequireString_ArgsOnly_键存在但值为空字符串_返回失败()
+        {
+            _step.Parameters["EmptyValue"] = "";
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("EmptyValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("不能为空"));
+        }
+
+        [Test]
+        public void TryRequireString_ArgsOnly_键存在但值为null_返回失败()
+        {
+            _step.Parameters["NullValue"] = null;
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("NullValue", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("不能为空"));
+        }
+
+        [Test]
+        public void TryRequireString_ArgsThenVariables_Args值为空字符串_不回退Variables()
+        {
+            _step.Parameters["RecipeId"] = "";
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var result = reader.TryRequireString("RecipeId", StepArgSource.ArgsThenVariables, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.IsNull(value);
+            Assert.That(error, Does.Contain("不能为空"));
+        }
+
+        [Test]
+        public void TryGetDouble_NegativeInfinity_返回失败()
+        {
+            _step.Parameters["NegInf"] = double.NegativeInfinity;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryGetDouble("NegInf", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("数值非法"));
+        }
+
+        [Test]
+        public void TryRequirePositiveDouble_NegativeInfinity_返回失败()
+        {
+            _step.Parameters["NegInf"] = double.NegativeInfinity;
+            var reader = StepArgsReader.From(_step, _context, "Test");
+            var result = reader.TryRequirePositiveDouble("NegInf", StepArgSource.ArgsOnly, out var value, out var error);
+
+            Assert.IsFalse(result);
+            Assert.That(error, Does.Contain("数值非法"));
+        }
+
+        [Test]
+        public void GetOptionalString_不存在时返回默认值()
+        {
+            var reader = StepArgsReader.From(_step, _context, "ApplyRecipe");
+            var value = reader.GetOptionalString("NonExist", "DEFAULT");
+
+            Assert.AreEqual("DEFAULT", value);
+        }
+
         #endregion
 
         #region Fail
