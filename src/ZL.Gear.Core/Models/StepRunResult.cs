@@ -63,6 +63,9 @@ namespace ZL.Gear.Core.StepHandler
             set => SetProperty(ref _outcome, value);
         }
 
+        /// <summary>终局语义细分（Timeout / Cancel / Abort 等，T-P0-01c）。</summary>
+        public StepVerdictKind VerdictKind { get; set; } = StepVerdictKind.None;
+
         public  string ResultString        {   get => Outcome == StepOutcome.Passed ? "OK" : "NG";    }
 
         /// <summary>

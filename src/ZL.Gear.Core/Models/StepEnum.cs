@@ -61,4 +61,19 @@
         Skipped       // 已跳过
     }
 
+    /// <summary>
+    /// 步骤终局语义（T-P0-01c）：与 <see cref="StepOutcome"/> 正交，区分 Timeout/Cancel/Abort（对标 OpenTAP Verdict 细粒度）。
+    /// </summary>
+    public enum StepVerdictKind
+    {
+        None = 0,
+        Passed,
+        Failed,
+        TimedOut,
+        Cancelled,
+        Skipped,
+        Aborted,
+        Error
+    }
+
 }

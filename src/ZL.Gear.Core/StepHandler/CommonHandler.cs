@@ -39,7 +39,7 @@ namespace ZL.Gear.Core.StepHandler
 
             if (!measurement.Success)
             {
-                return ExecutionResult<List<Measurement>>.Failed(
+                return ExecutionResult<List<Measurement>>.FailedWithSamples(
                     measurement.Message,
                     new List<Measurement> { measurement },
                     1

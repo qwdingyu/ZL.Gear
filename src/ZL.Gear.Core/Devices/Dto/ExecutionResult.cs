@@ -8,6 +8,7 @@ namespace ZL.Gear.Core.Devices
         Completed,
         TimedOut,
         Cancelled,
+        Skipped,
         Failed
     }
     // 新增：一个简单的内部接口，用于在非泛型基类上获取 object 类型的值
@@ -24,6 +25,9 @@ namespace ZL.Gear.Core.Devices
         public bool Success { get; set; }
         public string Message { get; set; } = "OK";
         public int SamplesCollected { get; set; } = 1;
+
+        /// <summary>终局语义（T-P0-01c）；默认 Completed / Failed 由 Success 推断。</summary>
+        public ExecutionStatus Status { get; set; } = ExecutionStatus.Completed;
 
         // ★ 新增：一个抽象属性，用于获取值的类型
         public abstract Type ValueType { get; }
@@ -43,7 +47,7 @@ namespace ZL.Gear.Core.Devices
         public static ExecutionResult Succeeded(string message = "OK")
             => new() { Success = true, Message = message };
         public static ExecutionResult Failed(string errorMessage)
-            => new() { Success = false, Message = errorMessage, SamplesCollected = 0 };
+            => new() { Success = false, Message = errorMessage, SamplesCollected = 0, Status = ExecutionStatus.Failed };
     }
     /// <summary>
     /// [内部工具] 表示带有强类型返回值的操作结果。
@@ -59,9 +63,14 @@ namespace ZL.Gear.Core.Devices
         public static ExecutionResult<T> Succeeded(T value, int sampleCount = 1, string message = "OK")
             => new() { Success = true, Value = value, SamplesCollected = sampleCount, Message = message };
         public static ExecutionResult<T> Failed(string errorMessage, T? defaultValue = default)
-            => new() { Success = false, Message = errorMessage, Value = defaultValue!, SamplesCollected = 0 };
+            => new() { Success = false, Message = errorMessage, Value = defaultValue!, SamplesCollected = 0, Status = ExecutionStatus.Failed };
 
-        public static ExecutionResult<T> Failed(string errorMessage, T value, int sampleCount = 1)
-            => new() { Success = false, Message = errorMessage, Value = value!, SamplesCollected = sampleCount };
-    } 
+        /// <summary>失败且保留已采集样本（SamplesCollected &gt; 0）。与 <see cref="Failed(string, T?)"/> 分离以避免重载歧义。</summary>
+        public static ExecutionResult<T> FailedWithSamples(string errorMessage, T value, int sampleCount)
+            => new() { Success = false, Message = errorMessage, Value = value!, SamplesCollected = sampleCount, Status = ExecutionStatus.Failed };
+
+        /// <summary>条件未满足：Success=true 且 Status=Skipped，执行器映射 StepOutcome.Skipped。</summary>
+        public static ExecutionResult<T> Skipped(string message = "Skipped", T? value = default)
+            => new() { Success = true, Message = message, Value = value!, SamplesCollected = 0, Status = ExecutionStatus.Skipped };
+    }
 }

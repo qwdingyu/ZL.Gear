@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using ZL.Gear.Core.Models;
+using ZL.Gear.Core.Planning;
 using ZL.Gear.Core.StepHandler;
 using ZL.Gear.Core.Runner;
 
@@ -57,5 +59,27 @@ namespace ZL.Gear.Core.Events
     {
         public string Message { get; }
         public RunErrorEvent(string msg) => Message = msg;
+    }
+
+    /// <summary>
+    /// 计划编译完成（成功或失败均发布，供 MES / UI 消费结构化诊断）。
+    /// </summary>
+    public class PlanCompileCompletedEvent : BaseEvent
+    {
+        public PlanCompileCompletedEvent(
+            bool success,
+            string planHash,
+            IList<PlanCompileDiagnostic> diagnostics)
+        {
+            Success = success;
+            PlanHash = planHash ?? string.Empty;
+            Diagnostics = diagnostics ?? Array.Empty<PlanCompileDiagnostic>();
+        }
+
+        public bool Success { get; }
+
+        public string PlanHash { get; }
+
+        public IList<PlanCompileDiagnostic> Diagnostics { get; }
     }
 }
