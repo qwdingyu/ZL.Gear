@@ -70,9 +70,10 @@ namespace ZL.Gear.Engine.Planning
             if (obj is IDictionary<string, object> dict)
             {
                 // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
+                var currentIsWaitUntil = false;
                 if (dict.TryGetValue("Type", out var typeObj) && typeObj != null && string.Equals(typeObj.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
                 {
-                    isWaitUntil = true;
+                    currentIsWaitUntil = true;
                 }
 
                 foreach (var kvp in dict)
@@ -83,11 +84,12 @@ namespace ZL.Gear.Engine.Planning
                         var text = kvp.Value.ToString();
                         if (!string.IsNullOrWhiteSpace(text))
                         {
-                            yield return (stepKey, text, isWaitUntil);
+                            yield return (stepKey, text, currentIsWaitUntil);
                         }
                     }
 
-                    foreach (var pair in CollectFromObject(kvp.Value, stepKey, isWaitUntil))
+                    // 子节点独立判断类型，不继承父级 WaitUntil 标记
+                    foreach (var pair in CollectFromObject(kvp.Value, stepKey, false))
                     {
                         yield return pair;
                     }
@@ -111,10 +113,11 @@ namespace ZL.Gear.Engine.Planning
         private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromJObject(JObject jobj, string stepKey, bool isWaitUntil = false)
         {
             // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
+            var currentIsWaitUntil = false;
             var typeToken = jobj["Type"];
             if (typeToken != null && string.Equals(typeToken.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
             {
-                isWaitUntil = true;
+                currentIsWaitUntil = true;
             }
 
             foreach (var prop in jobj.Properties())
@@ -125,11 +128,12 @@ namespace ZL.Gear.Engine.Planning
                     var text = prop.Value.ToString();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        yield return (stepKey, text, isWaitUntil);
+                        yield return (stepKey, text, currentIsWaitUntil);
                     }
                 }
 
-                foreach (var pair in CollectFromObject(prop.Value, stepKey, isWaitUntil))
+                // 子节点独立判断类型，不继承父级 WaitUntil 标记
+                foreach (var pair in CollectFromObject(prop.Value, stepKey, false))
                 {
                     yield return pair;
                 }

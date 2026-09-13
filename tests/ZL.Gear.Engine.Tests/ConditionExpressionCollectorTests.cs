@@ -221,6 +221,45 @@ namespace ZL.Gear.Engine.Tests
             Assert.That(results[0].IsWaitUntilCondition, Is.True);
         }
 
+        [Test]
+        public void CollectFromSteps_WaitUntil与Action兄弟节点_仅WaitUntil被标记()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "DynamicFlow",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Sequence"] = new List<object>
+                            {
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "WaitUntil",
+                                    ["Condition"] = "Ready == true"
+                                },
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "Action",
+                                    ["Condition"] = "x > 0"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var results = ConditionExpressionCollector.CollectFromSteps(steps).ToList();
+
+            Assert.That(results, Has.Count.EqualTo(2));
+            Assert.That(results[0].IsWaitUntilCondition, Is.True);
+            Assert.That(results[1].IsWaitUntilCondition, Is.False);
+        }
+
         #endregion
 
         #region 边界情况
