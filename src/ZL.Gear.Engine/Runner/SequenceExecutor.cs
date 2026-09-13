@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Devices.Abstractions;
 using ZL.Gear.Core.Events;
 using ZL.Gear.Core.Infrastructure;
@@ -16,8 +17,11 @@ using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
 using ZL.Gear.Core.StepHandler;
+using ZL.Gear.Core.Planning;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.Evaluation;
+using ZL.Gear.Engine.Planning;
+using ZL.Gear.Engine;
 
 namespace ZL.Gear.Engine.Runner
 {
@@ -35,9 +39,8 @@ namespace ZL.Gear.Engine.Runner
         private readonly ILogger _logger;
         private readonly IGearProfileService _profileService;
         private readonly IServiceProvider _serviceProvider;
-        private CancellationTokenSource _cancellationTokenSource;
+        private TestRunSession _activeSession;
         private bool _disposed;
-        private readonly Stopwatch _totalSw = new();
         /// <summary>
         /// 事件总线实例
         /// </summary>
@@ -58,12 +61,16 @@ namespace ZL.Gear.Engine.Runner
         /// <summary>
         /// 测试步骤之间的强制最小延迟，用于保护物理触点或等待 PLC 扫描周期。
         /// </summary>
-        private int _testStepInterval = 50;
-        private IProgress<StepRunResult> _progressReporter;
+        private readonly int _defaultStepIntervalMs;
         /// <summary>
         /// 同实例并发执行护栏：0=空闲，1=运行中（Interlocked 原子切换，single-flight）。
         /// </summary>
         private int _isExecuting;
+
+        /// <summary>
+        /// 当前活跃 Run 的 Id；无 Run 时为 null。用于 <see cref="Stop(Guid)"/> 与追溯。
+        /// </summary>
+        public Guid? ActiveRunId => _activeSession?.RunId;
 
         private void _log(string msg) => _logger?.LogInformation(msg);
 
@@ -84,10 +91,10 @@ namespace ZL.Gear.Engine.Runner
             _eventBus = eventBus ?? Core.Infrastructure.DefaultEventBus.Instance; // 兼容缺省注入
             _logger = logger;
             _resultEvaluator = resultEvaluator;
-            _testStepInterval = testStepInterval;
-            // P0-3：优先使用 Builder 注入的独立 ServiceProvider，避免进程级 WorkflowGlobal 跨运行污染；
-            // 未注入时回退 WorkflowGlobal.Services（legacy 兼容，仅单运行时场景）。
-            _serviceProvider = serviceProvider;
+            _defaultStepIntervalMs = testStepInterval;
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(
+                nameof(serviceProvider),
+                "SequenceExecutor 必须注入独立 IServiceProvider。请通过 SequenceExecutorBuilder.Build() 创建。");
             var roles = _profileService.LoadDeviceRoles();
             deviceRoles = roles != null
                 ? new System.Collections.Concurrent.ConcurrentDictionary<string, object>(roles)
@@ -95,12 +102,9 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
-        /// 解析本执行器专属的服务容器：优先注入的 provider，回退 WorkflowGlobal（legacy）。
+        /// 本 Runtime 专属服务容器（每个 Builder.Build 独立实例，对标 OpenTAP 插件/DI 隔离）。
         /// </summary>
-        private IServiceProvider ResolveServices()
-        {
-            return _serviceProvider ?? WorkflowGlobal.Services;
-        }
+        private IServiceProvider ResolveServices() => _serviceProvider;
 
         private void Log(string message)
         {
@@ -109,24 +113,20 @@ namespace ZL.Gear.Engine.Runner
 
         /// <summary>
         /// 尝试对指定步骤执行 Handler 健康检查。
-        /// 通过 <see cref="WorkflowGlobal.Services"/> 解析 <see cref="StepDispatcher"/> 并执行检查。
+        /// 通过本 Runtime 的 <see cref="IServiceProvider"/> 解析 <see cref="StepDispatcher"/> 并执行检查。
         /// </summary>
         /// <param name="step">当前步骤配置。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>健康检查结果；若无法解析 <see cref="StepDispatcher"/> 则返回 null。</returns>
         public async Task<HealthCheckResult?> TryCheckStepHealthAsync(StepConfig step, CancellationToken cancellationToken = default)
         {
-            try
+            var dispatcher = ResolveServices().GetService(typeof(StepDispatcher)) as StepDispatcher;
+            if (dispatcher == null)
             {
-                var dispatcher = ResolveServices().GetService(typeof(StepDispatcher)) as StepDispatcher;
-                if (dispatcher == null) return null;
-                return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
-            }
-            catch (InvalidOperationException)
-            {
-                // WorkflowGlobal 尚未初始化，无法解析 StepDispatcher
                 return null;
             }
+
+            return await dispatcher.TryCheckHealthAsync(step, cancellationToken);
         }
 
         /// <summary>
@@ -172,7 +172,6 @@ namespace ZL.Gear.Engine.Runner
             CancellationToken token,
             IProgress<StepRunResult> progress = null)
         {
-            _progressReporter = progress;
             if (_disposed) throw new ObjectDisposedException(nameof(SequenceExecutor));
 
             // P0-2 安全护栏：同一执行器实例禁止并发执行（single-flight）。
@@ -186,7 +185,7 @@ namespace ZL.Gear.Engine.Runner
 
             try
             {
-                return await ExecuteCoreAsync(steps, model, barcode, globalContext, token);
+                return await ExecuteCoreAsync(steps, model, barcode, globalContext, token, progress);
             }
             finally
             {
@@ -203,40 +202,75 @@ namespace ZL.Gear.Engine.Runner
             string model,
             string barcode,
             Dictionary<string, object> globalContext,
-            CancellationToken token)
+            CancellationToken token,
+            IProgress<StepRunResult> progress)
         {
-            // P0-4：运行快照隔离。BindProfile / Normalize / EvaluateResult 回填都会就地修改 StepConfig，
-            // 直接在入口深拷贝整棵步骤树，保证调用方传入的原始 Plan（含逻辑角色 Target）不被污染，
-            // 同一 Plan 可安全重跑、换工位或并发运行。
-            var planSnapshot = steps.Select(s => (StepConfig)s.Clone()).ToList();
+            // TestRunSession：本 Run 的 CTS / Progress / Stopwatch 作用域（对标 OpenTAP PlanRun）
+            using var session = TestRunSession.Start(token, progress, _defaultStepIntervalMs);
+            _activeSession = session;
+            var cancellationToken = session.CancellationToken;
+            var sharedData = new ContextVariableStore();
 
-            // Dispose existing CTS to prevent memory leak
-            if (_cancellationTokenSource != null)
+            try
             {
-                _cancellationTokenSource.Dispose();
-            }
-            _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
-            var cancellationToken = _cancellationTokenSource.Token;
-
-            // 动态调整间隔 (支持从全局上下文中读取)
+            // 动态调整间隔 (支持从全局上下文中读取，仅作用于本 Run)
             if (globalContext != null && globalContext.TryGetValue("TestStepInterval", out var intervalObj) && int.TryParse(intervalObj?.ToString(), out var intervalVal))
             {
-                _testStepInterval = intervalVal;
-                _log($"[配置] 步骤执行间隔已调整为: {_testStepInterval}ms");
+                session.StepIntervalMs = intervalVal;
+                _log($"[配置] 步骤执行间隔已调整为: {session.StepIntervalMs}ms");
             }
 
             var testWasStoppedByFail = false;
             var runInterrupted = false;
-            var sharedData = new ContextVariableStore();
 
-            var runResult = new TestRunResult { Model = model, Barcode = barcode, StartTime = DateTime.Now };
+            var runResult = new TestRunResult
+            {
+                RunId = session.RunId,
+                Model = model,
+                Barcode = barcode,
+                StartTime = DateTime.Now
+            };
+
+            // ── 编译门禁（T-P0-04b）：失败则 fail-closed，不租设备、不执行步骤 ──
+            var compileResult = CompilePlan(steps);
+            PublishPlanCompileEvent(compileResult);
+
+            if (!compileResult.Success)
+            {
+                runResult.OverallSuccess = false;
+                runResult.EndTime = DateTime.Now;
+                runResult.RunVerdictKind = StepVerdictKind.Error;
+                runResult.CompileErrors = compileResult.Diagnostics
+                    .Where(d => d.Level == PlanCompileDiagnosticLevel.Error)
+                    .ToList();
+                runResult.Summary = "计划编译失败: " + string.Join("; ", compileResult.Errors);
+                runResult.QuarantinedDeviceKeys = GetQuarantinedDeviceKeys().ToList();
+                _log($"[计划编译] {runResult.Summary}");
+                _eventBus.Publish(new RunStateChangedEvent(RunState.Error, runResult.Summary));
+                HandleFinalResultsAsync(runResult, steps, model, barcode);
+                return runResult;
+            }
+
+            runResult.CompileWarnings = compileResult.Diagnostics
+                .Where(d => d.Level == PlanCompileDiagnosticLevel.Warning)
+                .ToList();
+            foreach (var warning in compileResult.Warnings)
+            {
+                _log($"[计划编译·警告] {warning}");
+            }
+
+            var planSnapshot = compileResult.Plan.Steps.ToList();
+            runResult.PlanHash = compileResult.Plan.PlanHash;
+
+            MaybeClearQuarantineOnRunStart();
+
             var activeLeases = new List<IDisposable>();
             _log("==================================================");
             _log($"测试开始: 型号={model}, 条码={barcode}");
             _log("==================================================");
 
             _eventBus.Publish(new RunStateChangedEvent(RunState.Testing));
-            _totalSw.Restart();
+            session.Stopwatch.Restart();
             // 启动后台计时器任务，但「不要 await」它，让它在后台运行
             var timerTask = RunTimerLoopAsync(cancellationToken);
             Dictionary<string, IDevice> activeDevices = new();
@@ -299,13 +333,6 @@ namespace ZL.Gear.Engine.Runner
                         var context = new StepContext(stepKey, stepConfig, new ReadOnlyDictionary<string, IDevice>(activeDevices), ResolveServices(), cancellationToken,
                             RunTestMode.Auto, sharedData, globalContext, null, _log);
 
-                        // 注入点：调用 BindProfile 将 Profile 中的映射应用到 Step 配置中
-                        // deviceRoles 通常来自 DeviceProfile / 宿主 deviceRoles 映射
-                        // 为了匹配 BindProfile 的签名 IDictionary<string, string>，我们做一下转换
-                        var profileStrDict = deviceRoles.ToDictionary(k => k.Key, v => v.Value?.ToString());
-                        
-                        // 递归应用 BindProfile 到步骤树
-                        ApplyProfileToStepTree(stepConfig, profileStrDict);
                         await ExecuteStepRecursiveAsync(stepConfig, topLevelStepResult, context);
 
                         // 检查是否需要提前终止
@@ -320,9 +347,9 @@ namespace ZL.Gear.Engine.Runner
                             break;
                         }
                         
-                        if (_testStepInterval > 0)
+                        if (session.StepIntervalMs > 0)
                         {
-                            await Task.Delay(_testStepInterval, cancellationToken);
+                            await Task.Delay(session.StepIntervalMs, cancellationToken);
                         }
                     }
                     runResult.EndTime = DateTime.Now;
@@ -343,22 +370,29 @@ namespace ZL.Gear.Engine.Runner
             }
             finally
             {
-                _cancellationTokenSource.Cancel();
+                session.RequestStop();
                 sharedData?.Dispose();
                 _log("正在归还所有已租用的设备...");
                 activeLeases.ForEach(l => l.Dispose());
                 _log("设备已归还。");
 
                 try { await timerTask; } catch { /* 忽略取消或超时，确保清理完成 */ }
+                _activeSession = null;
             }
             // 5. 结果处理阶段：OverallSuccess 仅此单点写入（结局模型，非 catch 补丁）
-            _totalSw.Stop();
+            session.Stopwatch.Stop();
             runResult.EndTime = DateTime.Now;
             runResult.OverallSuccess = ComputeOverallSuccess(
                 leaseSuccess,
                 testWasStoppedByFail,
                 runInterrupted,
                 runResult.StepResults);
+            runResult.RunVerdictKind = ComputeRunVerdictKind(
+                leaseSuccess,
+                testWasStoppedByFail,
+                runInterrupted,
+                runResult.StepResults);
+            runResult.QuarantinedDeviceKeys = GetQuarantinedDeviceKeys().ToList();
             runResult.Summary = BuildSummary(runResult);
             HandleFinalResultsAsync(runResult, planSnapshot, model, barcode);
             _log("==================================================");
@@ -370,6 +404,13 @@ namespace ZL.Gear.Engine.Runner
             _log(ZL.Gear.Engine.Runner.Middlewares.DiagnosticsMiddleware.GenerateReport());
 
             return runResult;
+            }
+            finally
+            {
+                // 编译失败或异常路径也必须清掉 ActiveRunId，否则 Stop(Guid) 可能误操作下一 Run
+                sharedData?.Dispose();
+                _activeSession = null;
+            }
         }
 
         /// <summary>
@@ -417,18 +458,6 @@ namespace ZL.Gear.Engine.Runner
                 if (!string.Equals(stepConfig.StepType, "GROUP", StringComparison.OrdinalIgnoreCase))
                 {
                     // 2. 执行本步骤自身的原子命令（仅当所有子步骤都通过时）
-                    StepConfigNormalizer.Normalize(stepConfig, deviceRoles);
-
-                    // 桥接：若 StepConfig.EvaluateResult 仍未显式设置，则按命令名回填 Handler 侧元数据
-                    if (!stepConfig.EvaluateResult.HasValue)
-                    {
-                        var registry = context.GetService<IStepHandlerRegistry>();
-                        if (registry != null)
-                        {
-                            stepConfig.EvaluateResult = registry.GetEvaluateResult(stepConfig.Command);
-                        }
-                    }
-
                     var dispatcher = context.GetService<StepDispatcher>();
                     var measurementResult = await dispatcher.DispatchSingleAsync(stepConfig, context);
 
@@ -443,28 +472,29 @@ namespace ZL.Gear.Engine.Runner
                         }
                     }
                     // 由 StepConfig.EvaluateResult / StepHandlerCommandAttribute.EvaluateResult 控制是否跳过结果评估
-                    if (stepConfig.EvaluateResult == false)
+                    stepResult.Message = measurementResult.Message;
+
+                    if (measurementResult.Status == ExecutionStatus.Skipped)
                     {
-                        stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
-                        stepResult.Message = measurementResult.Message;
+                        ApplyVerdictFromExecution(stepResult, stepConfig, measurementResult);
+                    }
+                    else if (stepConfig.EvaluateResult == false)
+                    {
+                        ApplyVerdictFromExecution(stepResult, stepConfig, measurementResult);
                     }
                     else
                     {
-                        stepResult.Message = measurementResult.Message;
-                        // 详细诊断仅 Debug，避免产线 Info 刷屏；关键评估结果仍用 Info（见下方）
                         _logger?.LogDebug("[诊断] 步骤 {StepName} 产生 {ValueCount} 条测量数据", stepConfig.StepName, ValueCount);
 
                         stepResult.Status = StepExecutionStatus.Completed;
 
                         if (!measurementResult.Success)
                         {
-                            // 如果 dispatch 阶段就失败了（动作执行失败、通信超时、缺少参数等），直接判断为 Failed。
-                            stepResult.Outcome = StepOutcome.Failed;
+                            ApplyVerdictFromExecution(stepResult, stepConfig, measurementResult);
                             _log($"[评估] 步骤 {stepConfig.StepName} 执行失败: {measurementResult.Message}");
                         }
                         else
                         {
-                            // 3. 评估结果（使用重构后的评估器）
                             var evaluationResult = (_resultEvaluator ?? ResultEvaluator.Instance).Evaluate(stepResult, stepConfig);
                             _logger?.LogDebug(
                                 "[诊断] 评估详情: ExecutionType={ExecutionType}, ExpectedResults.Count={ExpectedCount}, Status={Status}, Outcome={Outcome}, Success={Success}, Message={Message}",
@@ -476,8 +506,8 @@ namespace ZL.Gear.Engine.Runner
                                 evaluationResult.Message);
 
                             stepResult.Outcome = evaluationResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
+                            stepResult.VerdictKind = evaluationResult.Success ? StepVerdictKind.Passed : StepVerdictKind.Failed;
 
-                            // 使用评估器的详细消息
                             if (!string.IsNullOrEmpty(evaluationResult.Message))
                             {
                                 stepResult.Message = evaluationResult.Message;
@@ -491,12 +521,16 @@ namespace ZL.Gear.Engine.Runner
             catch (OperationCanceledException)
             {
                 stepResult.Outcome = StepOutcome.Error;
+                stepResult.VerdictKind = context.CancellationToken.IsCancellationRequested
+                    ? StepVerdictKind.Cancelled
+                    : StepVerdictKind.Aborted;
                 stepResult.Message = "步骤超时或被取消。";
                 _log($"[取消] 步骤 {stepConfig.StepName} 被取消");
             }
             catch (Exception ex)
             {
                 stepResult.Outcome = StepOutcome.Error;
+                stepResult.VerdictKind = StepVerdictKind.Error;
                 stepResult.Message = $"步骤执行时发生内部错误: {ex.Message}";
                 _log($"[异常] 步骤 {stepConfig.StepName} 执行失败: {ex}");
             }
@@ -509,7 +543,7 @@ namespace ZL.Gear.Engine.Runner
 
                 var outcomeDisplay = stepResult.Outcome == StepOutcome.Passed ? "PASS" : stepResult.Outcome.ToString().ToUpper();
                 _logger?.LogInformation($"[{outcomeDisplay}] {stepConfig.StepName} 耗时={stepResult.DurationSeconds:F2}s, 消息: {stepResult.Message}");
-                _progressReporter?.Report(stepResult);
+                _activeSession?.Progress?.Report(stepResult);
                 _eventBus.Publish(new StepProgressEvent(stepResult));
             }
         }
@@ -616,8 +650,15 @@ namespace ZL.Gear.Engine.Runner
             var requiredDeviceKeys = CollectRequiredDevices(steps);
             var activeDevices = new System.Collections.Concurrent.ConcurrentDictionary<string, IDevice>();
 
+            var quarantine = ResolveServices().GetService(typeof(IDeviceQuarantineService)) as IDeviceQuarantineService;
+
             var leaseTasks = requiredDeviceKeys.Select(async key =>
             {
+                if (quarantine != null && quarantine.IsQuarantined(key, out var reason))
+                {
+                    throw new InvalidOperationException($"设备 '{key}' 处于超时隔离状态，拒绝租约: {reason}");
+                }
+
                 var lease = await _deviceService.LeaseAsync<IDevice>(key, token);
                 lock (leases) { leases.Add(lease); }
                 activeDevices.TryAdd(key, lease.Device);
@@ -677,6 +718,12 @@ namespace ZL.Gear.Engine.Runner
         {
             var sb = new StringBuilder();
             sb.AppendLine(runResult.OverallSuccess ? "测试通过 (PASS)" : "测试失败 (FAIL)");
+            sb.AppendLine($"RunVerdict: {runResult.RunVerdictKind}");
+            if (runResult.QuarantinedDeviceKeys != null && runResult.QuarantinedDeviceKeys.Count > 0)
+            {
+                sb.AppendLine($"隔离设备: {string.Join(", ", runResult.QuarantinedDeviceKeys)}");
+            }
+
             sb.AppendLine($"总耗时: {runResult.TotalDurationSeconds:F2} 秒.");
             sb.AppendLine("详细步骤摘要:");
 
@@ -705,123 +752,224 @@ namespace ZL.Gear.Engine.Runner
         /// <returns>所需设备键集合。</returns>
         private HashSet<string> CollectRequiredDevices(List<StepConfig> sequence)
         {
-            var keys = new HashSet<string>();
-            Action<StepConfig> collect = null;
-            collect = (step) =>
-            {
-                if (!step.Enable) return;
-                if (!string.IsNullOrEmpty(step.Target))
-                {
-                    if (deviceRoles.ContainsKey(step.Target))
-                        keys.Add(deviceRoles[step.Target].ToString());
-                    else
-                        keys.Add(step.Target);
-                }
-                // 添加所有额外目标设备
-                if (step.AdditionalTargets != null)
-                {
-                    foreach (var additionalTarget in step.AdditionalTargets)
-                    {
-                        if (!string.IsNullOrEmpty(additionalTarget))
-                        {
-                             // 资源检查的逻辑也应该统一：如果是逻辑名，映射为物理名；如果是物理名，直接用。
-                             // 注意：这里只是收集字符串，用于后续 LeaseAsync。
-                             if (deviceRoles.ContainsKey(additionalTarget))
-                                 keys.Add(deviceRoles[additionalTarget].ToString());
-                             else
-                                 keys.Add(additionalTarget); // 兼容直接物理名模式
-                        }
-                    }
-                }
-                // 递归处理子步骤
-                if (step.SubSteps != null)
-                {
-                    foreach (var sub in step.SubSteps) collect(sub);
-                }
+            return DeviceKeyResolver.CollectKeysFromStepTree(sequence, SnapshotDeviceRoles());
+        }
 
-                // 【关键增强】扫描 Parameters 中的 DynamicFlow 定义，找出嵌套设备需求
-                if (step.Parameters != null)
-                {
-                    foreach (var kvp in step.Parameters)
-                    {
-                        CollectNestedTargets(kvp.Value, keys);
-                    }
-                }
+        private Dictionary<string, object> SnapshotDeviceRoles()
+            => deviceRoles.ToDictionary(k => k.Key, v => v.Value);
+
+        private void ApplyVerdictFromExecution(
+            StepRunResult stepResult,
+            StepConfig stepConfig,
+            ExecutionResult<List<Measurement>> measurementResult)
+        {
+            switch (measurementResult.Status)
+            {
+                case ExecutionStatus.Skipped:
+                    stepResult.Outcome = StepOutcome.Skipped;
+                    stepResult.VerdictKind = StepVerdictKind.Skipped;
+                    return;
+                case ExecutionStatus.TimedOut:
+                    stepResult.Outcome = StepOutcome.Failed;
+                    stepResult.VerdictKind = StepVerdictKind.TimedOut;
+                    QuarantineStepDevices(stepConfig, measurementResult.Message);
+                    return;
+                case ExecutionStatus.Cancelled:
+                    stepResult.Outcome = StepOutcome.Error;
+                    stepResult.VerdictKind = StepVerdictKind.Cancelled;
+                    return;
+            }
+
+            stepResult.Outcome = measurementResult.Success ? StepOutcome.Passed : StepOutcome.Failed;
+            stepResult.VerdictKind = measurementResult.Success ? StepVerdictKind.Passed : StepVerdictKind.Failed;
+        }
+
+        private void QuarantineStepDevices(StepConfig step, string reason)
+        {
+            var quarantine = ResolveServices().GetService(typeof(IDeviceQuarantineService)) as IDeviceQuarantineService;
+            if (quarantine == null)
+            {
+                return;
+            }
+
+            var runId = _activeSession?.RunId ?? Guid.Empty;
+            var keys = DeviceKeyResolver.CollectKeysFromStepTree(new[] { step }, SnapshotDeviceRoles());
+            foreach (var key in keys)
+            {
+                quarantine.Quarantine(key, reason, runId);
+                _log($"[隔离] 设备 '{key}' 已标记隔离: {reason}");
+            }
+        }
+
+        private void MaybeClearQuarantineOnRunStart()
+        {
+            var options = ResolveServices().GetService(typeof(SequenceExecutorRuntimeOptions)) as SequenceExecutorRuntimeOptions;
+            if (options?.ClearDeviceQuarantineOnRunStart == true)
+            {
+                ClearDeviceQuarantine();
+            }
+        }
+
+        /// <summary>
+        /// 清空本 Runtime 全部设备隔离（运维复位 / 复检工位）。
+        /// </summary>
+        public void ClearDeviceQuarantine()
+        {
+            var quarantine = ResolveServices().GetService(typeof(IDeviceQuarantineService)) as IDeviceQuarantineService;
+            quarantine?.ClearAll();
+            _log("[隔离] 已清空全部设备隔离标记");
+        }
+
+        /// <summary>
+        /// 解除单台设备隔离。
+        /// </summary>
+        public void ReleaseDeviceQuarantine(string deviceKey)
+        {
+            var quarantine = ResolveServices().GetService(typeof(IDeviceQuarantineService)) as IDeviceQuarantineService;
+            quarantine?.Release(deviceKey);
+        }
+
+        /// <summary>
+        /// 当前隔离中的设备键快照。
+        /// </summary>
+        public IReadOnlyCollection<string> GetQuarantinedDeviceKeys()
+        {
+            var quarantine = ResolveServices().GetService(typeof(IDeviceQuarantineService)) as IDeviceQuarantineService;
+            return quarantine?.GetQuarantinedKeys() ?? Array.Empty<string>();
+        }
+
+        private static StepVerdictKind ComputeRunVerdictKind(
+            bool leaseSuccess,
+            bool stoppedByFail,
+            bool runInterrupted,
+            IReadOnlyList<StepRunResult> stepResults)
+        {
+            if (!leaseSuccess)
+            {
+                return StepVerdictKind.Error;
+            }
+
+            if (runInterrupted)
+            {
+                return StepVerdictKind.Cancelled;
+            }
+
+            if (stoppedByFail)
+            {
+                return StepVerdictKind.Aborted;
+            }
+
+            var verdicts = FlattenStepVerdicts(stepResults);
+            if (verdicts.Count == 0)
+            {
+                return StepVerdictKind.Passed;
+            }
+
+            if (verdicts.Any(v => v == StepVerdictKind.TimedOut))
+            {
+                return StepVerdictKind.TimedOut;
+            }
+
+            if (verdicts.Any(v => v == StepVerdictKind.Error))
+            {
+                return StepVerdictKind.Error;
+            }
+
+            if (verdicts.Any(v => v == StepVerdictKind.Failed))
+            {
+                return StepVerdictKind.Failed;
+            }
+
+            if (verdicts.Any(v => v == StepVerdictKind.Aborted))
+            {
+                return StepVerdictKind.Aborted;
+            }
+
+            if (verdicts.Any(v => v == StepVerdictKind.Cancelled))
+            {
+                return StepVerdictKind.Cancelled;
+            }
+
+            return StepVerdictKind.Passed;
+        }
+
+        private static List<StepVerdictKind> FlattenStepVerdicts(IReadOnlyList<StepRunResult> stepResults)
+        {
+            var list = new List<StepVerdictKind>();
+            if (stepResults == null)
+            {
+                return list;
+            }
+
+            foreach (var step in stepResults)
+            {
+                CollectVerdicts(step, list);
+            }
+
+            return list;
+        }
+
+        private static void CollectVerdicts(StepRunResult step, ICollection<StepVerdictKind> sink)
+        {
+            if (step == null)
+            {
+                return;
+            }
+
+            if (step.VerdictKind != StepVerdictKind.None && step.VerdictKind != StepVerdictKind.Skipped)
+            {
+                sink.Add(step.VerdictKind);
+            }
+
+            if (step.SubStepResults == null)
+            {
+                return;
+            }
+
+            foreach (var sub in step.SubStepResults)
+            {
+                CollectVerdicts(sub, sink);
+            }
+        }
+
+        /// <summary>
+        /// 将调用方 Plan 编译为运行快照（Clone / Profile / Normalize / 预检）。
+        /// </summary>
+        /// <remarks>
+        /// 优先从本 Runtime 的 DI 解析 <see cref="IPlanCompiler"/>；缺省回退 <see cref="DefaultPlanCompiler"/>。
+        /// DeviceRoleMap 做快照，避免编译过程中 ConcurrentDictionary 被并发修改。
+        /// </remarks>
+        private void PublishPlanCompileEvent(PlanCompileResult compileResult)
+        {
+            var planHash = compileResult.Plan?.PlanHash ?? string.Empty;
+            _eventBus.Publish(new PlanCompileCompletedEvent(
+                compileResult.Success,
+                planHash,
+                compileResult.Diagnostics));
+        }
+
+        private PlanCompileResult CompilePlan(IReadOnlyList<StepConfig> sourceSteps)
+        {
+            var services = ResolveServices();
+            var compiler = services.GetService(typeof(IPlanCompiler)) as IPlanCompiler
+                ?? new DefaultPlanCompiler();
+
+            var roleSnapshot = deviceRoles.ToDictionary(k => k.Key, v => v.Value);
+            var profileStrDict = roleSnapshot.ToDictionary(k => k.Key, v => v.Value?.ToString());
+            var compileOptions = services.GetService(typeof(PlanCompileOptions)) as PlanCompileOptions
+                ?? new PlanCompileOptions();
+
+            var context = new PlanCompileContext
+            {
+                DeviceRoleMap = roleSnapshot,
+                ProfileMap = profileStrDict,
+                HandlerRegistry = services.GetService(typeof(IStepHandlerRegistry)) as IStepHandlerRegistry,
+                HandlerLookup = services.GetService(typeof(IStepHandlerLookup)) as IStepHandlerLookup,
+                Options = compileOptions,
+                WorkflowEvaluator = services.GetService(typeof(IWorkflowEvaluator)) as IWorkflowEvaluator
             };
-            // 从顶层步骤开始收集
-            foreach (var topLevelStep in sequence) collect(topLevelStep);
-            return keys;
-        }
 
-        /// <summary>
-        /// 深度优先扫描对象（支持 JObject/JArray/Dictionary 混合模式），提取其中的 Target 字段
-        /// </summary>
-        private void CollectNestedTargets(object obj, HashSet<string> keys)
-        {
-            if (obj == null) return;
-
-            if (obj is JObject jobj)
-            {
-                foreach (var prop in jobj.Properties())
-                {
-                    if (prop.Name == "Target" && (prop.Value.Type == JTokenType.String || prop.Value.Type == JTokenType.Raw))
-                    {
-                        var target = prop.Value.ToString();
-                        if (!string.IsNullOrEmpty(target))
-                        {
-                            if (deviceRoles.ContainsKey(target))
-                                keys.Add(deviceRoles[target]?.ToString() ?? target);
-                            else
-                                keys.Add(target);
-                        }
-                    }
-                    CollectNestedTargets(prop.Value, keys);
-                }
-            }
-            else if (obj is JArray jarr)
-            {
-                foreach (var item in jarr) CollectNestedTargets(item, keys);
-            }
-            else if (obj is IDictionary<string, object> dict)
-            {
-                foreach (var kvp in dict)
-                {
-                    if (kvp.Key == "Target" && kvp.Value != null)
-                    {
-                        var target = kvp.Value.ToString();
-                        if (!string.IsNullOrEmpty(target))
-                        {
-                            if (deviceRoles.ContainsKey(target))
-                                keys.Add(deviceRoles[target]?.ToString() ?? target);
-                            else
-                                keys.Add(target);
-                        }
-                    }
-                    CollectNestedTargets(kvp.Value, keys);
-                }
-            }
-            else if (obj is IEnumerable<object> list)
-            {
-                foreach (var item in list) CollectNestedTargets(item, keys);
-            }
-        }
-        /// <summary>
-        /// 递归将 Profile 应用到步骤树。
-        /// </summary>
-        /// <param name="step">当前步骤。</param>
-        /// <param name="profile">Profile 映射表。</param>
-        private void ApplyProfileToStepTree(StepConfig step, IDictionary<string, string> profile)
-        {
-            if (step == null) return;
-            step.BindProfile(profile);
-            
-            if (step.SubSteps != null)
-            {
-                foreach (var sub in step.SubSteps)
-                {
-                    ApplyProfileToStepTree(sub, profile);
-                }
-            }
+            return compiler.Compile(sourceSteps, context);
         }
 
         /// <summary>
@@ -834,17 +982,39 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
-        /// 请求停止当前测试序列。
+        /// 请求停止当前活跃 Run（若无活跃 Run 则 no-op）。
         /// </summary>
-        public void Stop()
+        public void Stop() => Stop(activeRunId: null);
+
+        /// <summary>
+        /// 按 RunId 请求停止；RunId 不匹配时不操作（对标 OpenTAP 按 PlanRun 取消）。
+        /// </summary>
+        public void Stop(Guid runId)
         {
-            if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+            Stop(activeRunId: runId);
+        }
+
+        private void Stop(Guid? activeRunId)
+        {
+            var session = _activeSession;
+            if (session == null)
             {
-                _cancellationTokenSource.Cancel();
+                return;
+            }
+
+            if (activeRunId.HasValue && session.RunId != activeRunId.Value)
+            {
+                return;
+            }
+
+            if (!session.CancellationToken.IsCancellationRequested)
+            {
+                session.RequestStop();
                 _eventBus.Publish(new RunStateChangedEvent(RunState.Stopped, "用户停止"));
-                _log("收到停止请求，测试流程取消");
+                _log($"收到停止请求，RunId={session.RunId}，测试流程取消");
             }
         }
+
         /// <summary>
         /// 释放执行器资源。
         /// </summary>
@@ -853,7 +1023,8 @@ namespace ZL.Gear.Engine.Runner
             if (_disposed) return;
             _disposed = true;
             Stop();
-            _cancellationTokenSource?.Dispose();
+            _activeSession?.Dispose();
+            _activeSession = null;
         }
     }
 }

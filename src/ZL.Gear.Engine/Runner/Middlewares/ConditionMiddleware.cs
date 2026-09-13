@@ -30,7 +30,9 @@ namespace ZL.Gear.Engine.Runner.Middlewares
                         if (!shouldExecute)
                         {
                             context.Log($"[Skip] 步骤 '{step.StepName}' 未满足执行条件: {condition}");
-                            return ExecutionResult<List<Measurement>>.Succeeded(new List<Measurement>(), 0, "Condition not met");
+                            return ExecutionResult<List<Measurement>>.Skipped(
+                                $"[ConditionSkip] 条件未满足: {condition}",
+                                new List<Measurement>());
                         }
                     }
                     catch (Exception ex)

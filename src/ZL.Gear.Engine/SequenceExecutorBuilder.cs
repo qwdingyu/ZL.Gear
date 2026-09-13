@@ -17,6 +17,8 @@ using ZL.Gear.Core.Services;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.Evaluation;
 using ZL.Gear.Engine.Infrastructure;
+using ZL.Gear.Core.Planning;
+using ZL.Gear.Engine.Planning;
 using ZL.Gear.Engine.Runner;
 
 namespace ZL.Gear.Engine
@@ -73,6 +75,9 @@ namespace ZL.Gear.Engine
         private int _defaultStepTimeoutMs = 30000;
         private BuiltInModules _builtInModules = BuiltInModules.All;
         private DeviceHostMode _deviceHostMode = DeviceHostMode.Unspecified;
+        private bool _strictPlanCompile = true;
+        private bool _validateConditionSyntax = true;
+        private bool _clearDeviceQuarantineOnRunStart;
         private bool _built;
 
         public SequenceExecutorBuilder WithEvaluator(IResultEvaluator resultEvaluator)
@@ -88,6 +93,35 @@ namespace ZL.Gear.Engine
         public SequenceExecutorBuilder WithEnableUnknownCommandWarning(bool enable)
         {
             _enableUnknownCommandWarning = enable;
+            return this;
+        }
+
+        /// <summary>
+        /// 计划编译 Strict 模式：未注册命令编译失败（产线默认 true，对标 OpenTAP）。
+        /// Demo / legacy 动态命令场景可设为 false。
+        /// </summary>
+        public SequenceExecutorBuilder WithStrictPlanCompile(bool strict = true)
+        {
+            _strictPlanCompile = strict;
+            return this;
+        }
+
+        /// <summary>
+        /// 是否对 Parameters.Condition 做编译期语法预检（默认 true）。
+        /// </summary>
+        public SequenceExecutorBuilder WithValidateConditionSyntax(bool validate = true)
+        {
+            _validateConditionSyntax = validate;
+            return this;
+        }
+
+        /// <summary>
+        /// 每次 Run 开始前清空设备隔离表（默认 false；超时隔离持续到 Release/ClearDeviceQuarantine）。
+        /// 复检 / 同工位连续测板场景可设为 true。
+        /// </summary>
+        public SequenceExecutorBuilder WithClearDeviceQuarantineOnRunStart(bool clear = true)
+        {
+            _clearDeviceQuarantineOnRunStart = clear;
             return this;
         }
 
@@ -312,13 +346,6 @@ namespace ZL.Gear.Engine
             }
             _built = true;
 
-            // 跨 builder 场景：WorkflowGlobal 为进程级单例，仅首个 Build 的全局服务配置生效。
-            // 此处不抛异常（同进程多次独立 Build 是测试与多场景的合法用法），仅以警告提示可见性。
-            if (ZL.Gear.Core.Workflow.WorkflowGlobal.IsInitialized)
-            {
-                _logger?.Invoke("[SequenceExecutorBuilder][警告] WorkflowGlobal 已被先前 Build 初始化，本次 Build 的全局服务注册不会生效；如需独立全局配置请先 WorkflowGlobal.Reset() 或采用多进程部署。");
-            }
-
             // 1. 初始化项目库服务 (核心上下文)
             var libraryService = _customLibraryService ?? CreateDefaultLibraryService();
 
@@ -381,9 +408,12 @@ namespace ZL.Gear.Engine
             _logger?.Invoke("[SequenceExecutorBuilder] 构建完成");
 
             // 创建包装器，负责资源释放
+            var eventBus = provider.GetService(typeof(IEventBus)) as IEventBus;
+
             return new ManagedSequenceExecutor(
                 deviceService,
                 profileService,
+                eventBus,
                 logger,
                 _testStepInterval,
                 _resourceHolder,
@@ -465,19 +495,22 @@ namespace ZL.Gear.Engine
                 return new DefaultScenarioPipelineProvider(handlerFactory);
             });
 
-            // 注册 StepDispatcher
-            // 关键点：RegistryStepHandlerLookup 现在通过 DefaultStepHandlerProvider 外部化模板/回退策略
-            // 这样即使后续替换 DSL 引擎或回退逻辑，也不影响 StepDispatcher 构造函数签名
+            // Handler 查找表与 StepDispatcher 共享同一 RegistryStepHandlerLookup 实例（PlanCompiler 预检可感知模板）
+            services.AddSingleton(sp => new RegistryStepHandlerLookup(
+                new DefaultStepHandlerFactory(),
+                new DefaultStepHandlerProvider()));
+            services.AddSingleton<IStepHandlerLookup>(sp => sp.GetRequiredService<RegistryStepHandlerLookup>());
+            services.AddSingleton<IRegisterableStepHandlerLookup>(sp => sp.GetRequiredService<RegistryStepHandlerLookup>());
+
             services.AddSingleton(sp =>
             {
                 var actionRegistry = sp.GetRequiredService<IActionRegistry>();
                 var log = sp.GetRequiredService<Action<string>>();
                 var pipelineProvider = sp.GetRequiredService<IScenarioPipelineProvider>();
                 var pipeline = pipelineProvider.GetPipeline(_scenario, log);
+                var lookup = sp.GetRequiredService<RegistryStepHandlerLookup>();
                 return new StepDispatcher(
-                    new RegistryStepHandlerLookup(
-                        new DefaultStepHandlerFactory(),
-                        new DefaultStepHandlerProvider()),
+                    lookup,
                     new DefaultStepHandlerFactory(),
                     actionRegistry,
                     pipeline,
@@ -487,16 +520,26 @@ namespace ZL.Gear.Engine
                     _builtInModules);
             });
 
-            // 暴露 IStepHandlerRegistry 接口（由 StepDispatcher 实现），
-            // 供运行时 EvaluateResult 命令级元数据查询（SequenceExecutor 桥接）与宿主扩展使用
             services.AddSingleton<IStepHandlerRegistry>(sp => sp.GetRequiredService<StepDispatcher>());
+            services.AddSingleton<IPlanCompiler, DefaultPlanCompiler>();
+            services.AddSingleton(new PlanCompileOptions
+            {
+                StrictMissingHandlerCheck = _strictPlanCompile,
+                ValidateConditionSyntax = _validateConditionSyntax
+            });
+            services.AddSingleton(new SequenceExecutorRuntimeOptions
+            {
+                ClearDeviceQuarantineOnRunStart = _clearDeviceQuarantineOnRunStart
+            });
+            services.AddSingleton<IDeviceQuarantineService, RuntimeDeviceQuarantineService>();
+            // 每个 Runtime 独立 EventBus，避免多工位串事件（对标 OpenTAP PlanRun 隔离）
+            services.AddSingleton<IEventBus, DefaultEventBus>();
 
             // 自定义服务配置（如果指定）
             _customServicesConfig?.Invoke(services);
 
-            var provider = services.BuildServiceProvider();
-            WorkflowGlobal.Initialize(provider);
-            return provider;
+            // 每个 Build 产出独立 ServiceProvider，不再写入进程级 WorkflowGlobal（对标多 Runtime 隔离）。
+            return services.BuildServiceProvider();
         }
 
         private ILogger<SequenceExecutor> CreateLogger()
@@ -520,6 +563,7 @@ namespace ZL.Gear.Engine
         public ManagedSequenceExecutor(
             IDeviceService deviceService,
             IGearProfileService profileService,
+            IEventBus eventBus,
             ILogger<SequenceExecutor> logger,
             int testStepInterval,
             List<IDisposable> resourceHolder,
@@ -527,7 +571,7 @@ namespace ZL.Gear.Engine
             bool disposeProfileService,
             IResultEvaluator resultEvaluator,
             IServiceProvider serviceProvider)
-            : base(deviceService, profileService, null, logger, resultEvaluator, testStepInterval, serviceProvider)
+            : base(deviceService, profileService, eventBus, logger, resultEvaluator, testStepInterval, serviceProvider)
         {
             _deviceService = deviceService;
             _profileService = profileService;
@@ -644,6 +688,9 @@ namespace ZL.Gear.Engine
 
         public string Interpolate(string template, IDictionary<string, object> variables)
             => _inner.Interpolate(template, variables);
+
+        public bool TryValidateConditionSyntax(string expression, out string errorMessage)
+            => _inner.TryValidateConditionSyntax(expression, out errorMessage);
     }
 
     /// <summary>

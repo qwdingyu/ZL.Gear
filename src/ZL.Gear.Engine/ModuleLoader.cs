@@ -316,6 +316,12 @@ namespace ZL.Gear.Engine
                         LoadAssembly(assembly);
                         break;
                     case IGearExtension extension:
+                        // 显式实例路径：仍须注册同程序集内的 IWorkflowActionProvider（如 Seat WorkflowActionProvider）
+                        var extensionTypes = extension.GetType().Assembly
+                            .GetTypes()
+                            .Where(t => !t.IsInterface && !t.IsAbstract)
+                            .ToList();
+                        ScanAndRegisterWorkflowActionProvider(extensionTypes);
                         extension.Initialize(_registry);
                         break;
                 }
@@ -580,11 +586,21 @@ namespace ZL.Gear.Engine
         /// <param name="types">类型列表。</param>
         private void ScanAndRegisterWorkflowActionProvider(List<Type> types)
         {
-            foreach (var type in types.Where(t => typeof(IWorkflowActionProvider).IsAssignableFrom(t)))
+            foreach (var type in types.Where(t =>
+                         typeof(IWorkflowActionProvider).IsAssignableFrom(t)
+                         && !t.IsInterface
+                         && !t.IsAbstract))
             {
                 try
                 {
-                    var provider = (IWorkflowActionProvider)_handlerFactory.CreateHandler(type);
+                    var provider = _serviceProvider?.GetService(type) as IWorkflowActionProvider
+                                   ?? Activator.CreateInstance(type) as IWorkflowActionProvider;
+                    if (provider == null)
+                    {
+                        _log($"[ModuleLoader][ERROR] 注册 ActionProvider 失败: {type.FullName}, 无法实例化");
+                        continue;
+                    }
+
                     provider.RegisterActions(_actionRegistry);
                 }
                 catch (Exception ex)

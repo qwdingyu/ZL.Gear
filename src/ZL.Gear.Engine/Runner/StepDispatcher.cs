@@ -459,14 +459,10 @@ namespace ZL.Gear.Engine.Runner
                         {
                             // Continue：不中断序列的意图由执行器结合 StopByFail 理解；
                             // 此处必须返回 Failed，避免 EvaluateResult=false / Execute 把空测量当成 PASS（防漏检）。
-                            return ExecutionResult<List<Measurement>>.Failed(
-                                $"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)",
-                                new List<Measurement>());
+                            return TimedOutResult($"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)");
                         }
 
-                        return ExecutionResult<List<Measurement>>.Failed(
-                            $"步骤执行超时 ({timeoutMs}ms)",
-                            new List<Measurement>());
+                        return TimedOutResult($"步骤执行超时 ({timeoutMs}ms)");
                     }
                 }
 
@@ -493,30 +489,34 @@ namespace ZL.Gear.Engine.Runner
             }
             catch (OperationCanceledException) when (stepTimeoutCts.IsCancellationRequested && !context.CancellationToken.IsCancellationRequested)
             {
-                // 本步骤超时（非上层取消）
                 _log($"[Timeout] 步骤 '{step.StepName}' 执行超时 ({timeoutMs}ms), TimeoutAction={timeoutAction}");
                 if (string.Equals(timeoutAction, "Continue", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Continue：不中断序列的意图由执行器结合 StopByFail 理解；
-                    // 此处必须返回 Failed，避免 EvaluateResult=false / Execute 把空测量当成 PASS（防漏检）。
-                    return ExecutionResult<List<Measurement>>.Failed(
-                        $"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)",
-                        new List<Measurement>());
+                    return TimedOutResult($"[TimeoutContinue] 步骤执行超时 ({timeoutMs}ms)");
                 }
 
-                return ExecutionResult<List<Measurement>>.Failed(
-                    $"步骤执行超时 ({timeoutMs}ms)",
-                    new List<Measurement>());
+                return TimedOutResult($"步骤执行超时 ({timeoutMs}ms)");
             }
             catch (OperationCanceledException)
             {
-                return ExecutionResult<List<Measurement>>.Failed("操作超时或被取消。");
+                var cancelled = ExecutionResult<List<Measurement>>.Failed("操作超时或被取消。");
+                cancelled.Status = context.CancellationToken.IsCancellationRequested
+                    ? ExecutionStatus.Cancelled
+                    : ExecutionStatus.TimedOut;
+                return cancelled;
             }
             catch (Exception ex)
             {
                 _log($"[StepDispatcher] Exception in step {step.StepName}: {ex}");
                 return ExecutionResult<List<Measurement>>.Failed($"执行错误: {ex.ToString().Replace("\r", "").Replace("\n", " ")}");
             }
+        }
+
+        private static ExecutionResult<List<Measurement>> TimedOutResult(string message)
+        {
+            var result = ExecutionResult<List<Measurement>>.Failed(message, new List<Measurement>());
+            result.Status = ExecutionStatus.TimedOut;
+            return result;
         }
 
         /// <summary>
