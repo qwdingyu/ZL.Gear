@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ZL.Gear.Extensions.Data.Abstractions;
 using ZL.Gear.Extensions.Data.Configuration;
+using ZL.Gear.Extensions.Data.Utilities;
 
 namespace ZL.Gear.Extensions.Data.Providers
 {
@@ -15,6 +16,8 @@ namespace ZL.Gear.Extensions.Data.Providers
         private readonly string _masterFilePath;
         private readonly string _detailFilePath;
         private readonly object _lockObj = new object();
+        private long _nextMasterId = 1;
+        private long _nextDetailId = 1;
         private bool _disposed;
 
         public Enums.StorageType StorageType => Enums.StorageType.CsvFile;
@@ -28,12 +31,21 @@ namespace ZL.Gear.Extensions.Data.Providers
             _masterFilePath = Path.Combine(_config.Directory, $"{_config.FilePrefix}_Master_{timestamp}.csv");
             _detailFilePath = Path.Combine(_config.Directory, $"{_config.FilePrefix}_Detail_{timestamp}.csv");
 
-            InitializeFiles();
+            lock (_lockObj)
+            {
+                InitializeFiles();
+                SeedIdCountersFromFiles();
+            }
         }
 
         public Task InitializeAsync()
         {
-            InitializeFiles();
+            lock (_lockObj)
+            {
+                InitializeFiles();
+                SeedIdCountersFromFiles();
+            }
+
             return Task.CompletedTask;
         }
 
@@ -54,36 +66,68 @@ namespace ZL.Gear.Extensions.Data.Providers
 
         public Task<bool> SaveAsync(TestResultModel result)
         {
-            if (result == null) return Task.FromResult(false);
-
-            try
+            if (result == null)
             {
-                CheckAndRotateFile(_masterFilePath);
-                CheckAndRotateFile(_detailFilePath);
-
-                var masterLine = FormatMasterLine(result);
-                AppendLine(_masterFilePath, masterLine);
-
-                foreach (var item in result.Items)
-                {
-                    var detailLine = FormatDetailLine(item);
-                    AppendLine(_detailFilePath, detailLine);
-                }
-
-                return Task.FromResult(true);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 保存失败: {ex.Message}");
                 return Task.FromResult(false);
             }
+
+            lock (_lockObj)
+            {
+                try
+                {
+                    return Task.FromResult(SaveCore(result));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[CsvFileStorageProvider] 保存失败: {ex.Message}");
+                    return Task.FromResult(false);
+                }
+            }
+        }
+
+        private bool SaveCore(TestResultModel result)
+        {
+            CheckAndRotateFile(_masterFilePath);
+            CheckAndRotateFile(_detailFilePath);
+
+            var masterId = result.Id > 0 ? result.Id : _nextMasterId++;
+            if (result.Id <= 0)
+            {
+                result.Id = masterId;
+            }
+            else if (masterId >= _nextMasterId)
+            {
+                _nextMasterId = masterId + 1;
+            }
+
+            AppendLine(_masterFilePath, FormatMasterLine(result));
+
+            foreach (var item in result.Items)
+            {
+                item.TestResultsId = masterId;
+                if (item.Id <= 0)
+                {
+                    item.Id = _nextDetailId++;
+                }
+                else if (item.Id >= _nextDetailId)
+                {
+                    _nextDetailId = item.Id + 1;
+                }
+
+                AppendLine(_detailFilePath, FormatDetailLine(item));
+            }
+
+            return true;
         }
 
         public async Task<int> SaveBatchAsync(IEnumerable<TestResultModel> results)
         {
-            if (results == null) return 0;
+            if (results == null)
+            {
+                return 0;
+            }
 
-            int count = 0;
+            var count = 0;
             foreach (var result in results)
             {
                 if (await SaveAsync(result).ConfigureAwait(false))
@@ -91,185 +135,179 @@ namespace ZL.Gear.Extensions.Data.Providers
                     count++;
                 }
             }
+
             return count;
         }
 
-        public async Task<IReadOnlyList<TestResultModel>> QueryByBarcodeAsync(string barcode, DateTime? startTime = null, DateTime? endTime = null)
+        public Task<IReadOnlyList<TestResultModel>> QueryByBarcodeAsync(string barcode, DateTime? startTime = null, DateTime? endTime = null)
         {
-            var results = new List<TestResultModel>();
-
-            try
+            lock (_lockObj)
             {
-                var allLines = ReadAllLines(_masterFilePath);
-                var dataLines = allLines.Skip(1);
-
-                foreach (var line in dataLines)
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = ParseLine(line);
-                    if (parts.Length < 10) continue;
-
-                    if (parts[1] != barcode) continue;
-
-                    if (startTime.HasValue && DateTime.TryParse(parts[4], out var testTime))
+                    var results = QueryMasterRecords(record =>
                     {
-                        if (testTime < startTime.Value) continue;
-                    }
-                    if (endTime.HasValue && DateTime.TryParse(parts[4], out testTime))
+                        if (record.Barcode != barcode)
+                        {
+                            return false;
+                        }
+
+                        if (startTime.HasValue && record.TestStartTime < startTime.Value)
+                        {
+                            return false;
+                        }
+
+                        if (endTime.HasValue && record.TestStartTime > endTime.Value)
+                        {
+                            return false;
+                        }
+
+                        return true;
+                    });
+
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(results);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[CsvFileStorageProvider] 按条码查询失败: {ex.Message}");
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(new List<TestResultModel>());
+                }
+            }
+        }
+
+        public Task<IReadOnlyList<TestResultModel>> QueryByTimeRangeAsync(DateTime startTime, DateTime endTime)
+        {
+            lock (_lockObj)
+            {
+                try
+                {
+                    var results = QueryMasterRecords(record =>
+                        record.TestStartTime >= startTime && record.TestStartTime <= endTime);
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(results);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[CsvFileStorageProvider] 按时间范围查询失败: {ex.Message}");
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(new List<TestResultModel>());
+                }
+            }
+        }
+
+        public Task<(IReadOnlyList<TestResultModel> Items, int Total)> QueryPagedAsync(int page, int pageSize, string barcode = null, string model = null)
+        {
+            lock (_lockObj)
+            {
+                var allResults = QueryMasterRecords(record =>
+                {
+                    if (!string.IsNullOrEmpty(barcode) && record.Barcode != barcode)
                     {
-                        if (testTime > endTime.Value) continue;
+                        return false;
                     }
 
-                    var result = ParseMasterLine(parts);
-                    result.Items = await QueryDetailsByMasterIdAsync(result.Id);
-                    results.Add(result);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 按条码查询失败: {ex.Message}");
-            }
+                    if (!string.IsNullOrEmpty(model) && record.Model != model)
+                    {
+                        return false;
+                    }
 
-            return results;
+                    return true;
+                });
+
+                var total = allResults.Count;
+                var pagedItems = allResults
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return Task.FromResult<(IReadOnlyList<TestResultModel> Items, int Total)>((pagedItems, total));
+            }
         }
 
-        public async Task<IReadOnlyList<TestResultModel>> QueryByTimeRangeAsync(DateTime startTime, DateTime endTime)
+        public Task<IReadOnlyList<TestResultModel>> GetPendingUploadAsync(int batchSize = 20)
         {
-            var results = new List<TestResultModel>();
-
-            try
+            lock (_lockObj)
             {
-                var allLines = ReadAllLines(_masterFilePath);
-                var dataLines = allLines.Skip(1);
-
-                foreach (var line in dataLines)
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = ParseLine(line);
-                    if (parts.Length < 10) continue;
-
-                    if (!DateTime.TryParse(parts[4], out var testTime)) continue;
-                    if (testTime < startTime || testTime > endTime) continue;
-
-                    var result = ParseMasterLine(parts);
-                    result.Items = await QueryDetailsByMasterIdAsync(result.Id);
-                    results.Add(result);
+                    var results = QueryMasterRecords(record => !record.IsTransmitted)
+                        .Take(batchSize)
+                        .ToList();
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(results);
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 按时间范围查询失败: {ex.Message}");
-            }
-
-            return results;
-        }
-
-        public async Task<(IReadOnlyList<TestResultModel> Items, int Total)> QueryPagedAsync(int page, int pageSize, string barcode = null, string model = null)
-        {
-            var allResults = new List<TestResultModel>();
-
-            var allLines = ReadAllLines(_masterFilePath);
-            var dataLines = allLines.Skip(1);
-
-            foreach (var line in dataLines)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-
-                var parts = ParseLine(line);
-                if (parts.Length < 10) continue;
-
-                if (!string.IsNullOrEmpty(barcode) && parts[1] != barcode) continue;
-                if (!string.IsNullOrEmpty(model) && parts[3] != model) continue;
-
-                var result = ParseMasterLine(parts);
-                result.Items = await QueryDetailsByMasterIdAsync(result.Id);
-                allResults.Add(result);
-            }
-
-            var total = allResults.Count;
-            var pagedItems = allResults.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-
-            return (pagedItems, total);
-        }
-
-        public async Task<IReadOnlyList<TestResultModel>> GetPendingUploadAsync(int batchSize = 20)
-        {
-            var results = new List<TestResultModel>();
-
-            try
-            {
-                var allLines = ReadAllLines(_masterFilePath);
-                var dataLines = allLines.Skip(1).Take(batchSize);
-
-                foreach (var line in dataLines)
+                catch (Exception ex)
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = ParseLine(line);
-                    if (parts.Length < 10) continue;
-
-                    if (parts[7] == "True" || parts[7] == "1") continue;
-
-                    var result = ParseMasterLine(parts);
-                    result.Items = await QueryDetailsByMasterIdAsync(result.Id);
-                    results.Add(result);
+                    Console.WriteLine($"[CsvFileStorageProvider] 获取待上传数据失败: {ex.Message}");
+                    return Task.FromResult<IReadOnlyList<TestResultModel>>(new List<TestResultModel>());
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 获取待上传数据失败: {ex.Message}");
-            }
-
-            return results;
         }
 
         public Task<bool> UpdateUploadStatusAsync(long id, bool success, string message)
         {
-            try
+            lock (_lockObj)
             {
-                var lines = ReadAllLines(_masterFilePath).ToList();
-                if (lines.Count <= 1) return Task.FromResult(false);
-
-                var sb = new StringBuilder();
-                sb.AppendLine(lines[0]);
-
-                for (int i = 1; i < lines.Count; i++)
+                try
                 {
-                    var line = lines[i];
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = ParseLine(line);
-                    if (parts.Length < 10) continue;
-
-                    if (long.TryParse(parts[0], out var recordId) && recordId == id)
+                    var lines = ReadAllLines(_masterFilePath).ToList();
+                    if (lines.Count <= 1)
                     {
-                        parts[7] = success.ToString();
-                        parts[8] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                        parts[9] = message?.Replace(",", ";") ?? "";
-                        line = string.Join(",", parts);
+                        return Task.FromResult(false);
                     }
 
-                    sb.AppendLine(line);
-                }
+                    var updated = false;
+                    var sb = new StringBuilder();
+                    sb.AppendLine(lines[0]);
 
-                File.WriteAllText(_masterFilePath, sb.ToString(), Encoding.UTF8);
-                return Task.FromResult(true);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 更新上传状态失败: {ex.Message}");
-                return Task.FromResult(false);
+                    for (var i = 1; i < lines.Count; i++)
+                    {
+                        var line = lines[i];
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        var parts = CsvFormat.ParseLine(line);
+                        if (parts.Length < 10)
+                        {
+                            sb.AppendLine(line);
+                            continue;
+                        }
+
+                        if (long.TryParse(parts[0], out var recordId) && recordId == id)
+                        {
+                            var model = ParseMasterLine(parts);
+                            model.IsTransmitted = success;
+                            model.TransmitTime = DateTime.Now;
+                            model.TransmitMessage = message;
+                            line = FormatMasterLine(model);
+                            updated = true;
+                        }
+
+                        sb.AppendLine(line);
+                    }
+
+                    if (!updated)
+                    {
+                        return Task.FromResult(false);
+                    }
+
+                    File.WriteAllText(_masterFilePath, sb.ToString(), Encoding.UTF8);
+                    return Task.FromResult(true);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[CsvFileStorageProvider] 更新上传状态失败: {ex.Message}");
+                    return Task.FromResult(false);
+                }
             }
         }
 
-        public Task<bool> ExportAsync(string targetPath, DateTime startTime, DateTime endTime)
+        public async Task<bool> ExportAsync(string targetPath, DateTime startTime, DateTime endTime)
         {
             try
             {
-                var results = QueryByTimeRangeAsync(startTime, endTime).Result;
+                var results = await QueryByTimeRangeAsync(startTime, endTime).ConfigureAwait(false);
 
+                Directory.CreateDirectory(targetPath);
                 var masterPath = Path.Combine(targetPath, "Export_Master.csv");
                 var detailPath = Path.Combine(targetPath, "Export_Detail.csv");
 
@@ -292,60 +330,143 @@ namespace ZL.Gear.Extensions.Data.Providers
                 File.WriteAllText(masterPath, masterSb.ToString(), Encoding.UTF8);
                 File.WriteAllText(detailPath, detailSb.ToString(), Encoding.UTF8);
 
-                return Task.FromResult(true);
+                return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[CsvFileStorageProvider] 导出失败: {ex.Message}");
-                return Task.FromResult(false);
+                return false;
             }
         }
 
-        private async Task<List<TestItemModel>> QueryDetailsByMasterIdAsync(long masterId)
+        private List<TestResultModel> QueryMasterRecords(Func<TestResultModel, bool> predicate)
+        {
+            var results = new List<TestResultModel>();
+            var allLines = ReadAllLines(_masterFilePath);
+
+            foreach (var line in allLines.Skip(1))
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var parts = CsvFormat.ParseLine(line);
+                if (parts.Length < 10)
+                {
+                    continue;
+                }
+
+                var result = ParseMasterLine(parts);
+                if (!predicate(result))
+                {
+                    continue;
+                }
+
+                result.Items = QueryDetailsByMasterId(result.Id);
+                results.Add(result);
+            }
+
+            return results;
+        }
+
+        private List<TestItemModel> QueryDetailsByMasterId(long masterId)
         {
             var items = new List<TestItemModel>();
+            var allLines = ReadAllLines(_detailFilePath);
 
-            try
+            foreach (var line in allLines.Skip(1))
             {
-                var allLines = ReadAllLines(_detailFilePath);
-                var dataLines = allLines.Skip(1);
-
-                foreach (var line in dataLines)
+                if (string.IsNullOrWhiteSpace(line))
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = ParseLine(line);
-                    if (parts.Length < 11) continue;
-
-                    if (long.TryParse(parts[1], out var pid) && pid == masterId)
-                    {
-                        items.Add(ParseDetailLine(parts));
-                    }
+                    continue;
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[CsvFileStorageProvider] 查询子表数据失败: {ex.Message}");
+
+                var parts = CsvFormat.ParseLine(line);
+                if (parts.Length < 11)
+                {
+                    continue;
+                }
+
+                if (long.TryParse(parts[1], out var pid) && pid == masterId)
+                {
+                    items.Add(ParseDetailLine(parts));
+                }
             }
 
             return items;
         }
 
+        private void SeedIdCountersFromFiles()
+        {
+            _nextMasterId = Math.Max(1, ReadMaxIdColumn(_masterFilePath, 0) + 1);
+            _nextDetailId = Math.Max(1, ReadMaxIdColumn(_detailFilePath, 0) + 1);
+        }
+
+        private static long ReadMaxIdColumn(string path, int columnIndex)
+        {
+            if (!File.Exists(path))
+            {
+                return 0;
+            }
+
+            long max = 0;
+            foreach (var line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("Id,", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var parts = CsvFormat.ParseLine(line);
+                if (parts.Length > columnIndex && long.TryParse(parts[columnIndex], out var id))
+                {
+                    if (id > max)
+                    {
+                        max = id;
+                    }
+                }
+            }
+
+            return max;
+        }
+
         private string FormatMasterLine(TestResultModel model)
         {
-            return $"{model.Id},{Escape(model.Barcode)},{Escape(model.StationNo)},{Escape(model.Model)}," +
-                   $"{model.TestStartTime:yyyy-MM-dd HH:mm:ss},{model.TotalDurationSec},{Escape(model.FinalResult)}," +
-                   $"{model.IsTransmitted},{model.TransmitTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? ""},{Escape(model.TransmitMessage)}";
+            return CsvFormat.JoinFields(new[]
+            {
+                model.Id.ToString(),
+                CsvFormat.EscapeField(model.Barcode),
+                CsvFormat.EscapeField(model.StationNo),
+                CsvFormat.EscapeField(model.Model),
+                model.TestStartTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                model.TotalDurationSec.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                CsvFormat.EscapeField(model.FinalResult),
+                model.IsTransmitted.ToString(),
+                model.TransmitTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
+                CsvFormat.EscapeField(model.TransmitMessage)
+            });
         }
 
         private string FormatDetailLine(TestItemModel item)
         {
-            return $"{item.Id},{item.TestResultsId},{Escape(item.StepKey)},{Escape(item.TestItem)}," +
-                   $"{Escape(item.TestValue)},{Escape(item.Unit)},{Escape(item.LCL)},{Escape(item.UCL)}," +
-                   $"{item.MetricValue?.ToString() ?? ""},{Escape(item.TestResult)},{item.StepStartTime:yyyy-MM-dd HH:mm:ss}";
+            return CsvFormat.JoinFields(new[]
+            {
+                item.Id.ToString(),
+                item.TestResultsId.ToString(),
+                CsvFormat.EscapeField(item.StepKey),
+                CsvFormat.EscapeField(item.TestItem),
+                CsvFormat.EscapeField(item.TestValue),
+                CsvFormat.EscapeField(item.Unit),
+                CsvFormat.EscapeField(item.LCL),
+                CsvFormat.EscapeField(item.UCL),
+                item.MetricValue?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                CsvFormat.EscapeField(item.TestResult),
+                item.StepStartTime.ToString("yyyy-MM-dd HH:mm:ss")
+            });
         }
 
-        private TestResultModel ParseMasterLine(string[] parts)
+        private static TestResultModel ParseMasterLine(string[] parts)
         {
             return new TestResultModel
             {
@@ -354,7 +475,7 @@ namespace ZL.Gear.Extensions.Data.Providers
                 StationNo = parts[2],
                 Model = parts[3],
                 TestStartTime = DateTime.TryParse(parts[4], out var dt) ? dt : DateTime.MinValue,
-                TotalDurationSec = double.TryParse(parts[5], out var dur) ? dur : 0,
+                TotalDurationSec = double.TryParse(parts[5], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dur) ? dur : 0,
                 FinalResult = parts[6],
                 IsTransmitted = parts[7] == "True" || parts[7] == "1",
                 TransmitTime = DateTime.TryParse(parts[8], out var tt) ? tt : (DateTime?)null,
@@ -362,7 +483,7 @@ namespace ZL.Gear.Extensions.Data.Providers
             };
         }
 
-        private TestItemModel ParseDetailLine(string[] parts)
+        private static TestItemModel ParseDetailLine(string[] parts)
         {
             return new TestItemModel
             {
@@ -374,26 +495,19 @@ namespace ZL.Gear.Extensions.Data.Providers
                 Unit = parts[5],
                 LCL = parts[6],
                 UCL = parts[7],
-                MetricValue = double.TryParse(parts[8], out var mv) ? mv : (double?)null,
+                MetricValue = double.TryParse(parts[8], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var mv) ? mv : (double?)null,
                 TestResult = parts[9],
                 StepStartTime = DateTime.TryParse(parts[10], out var st) ? st : DateTime.MinValue
             };
         }
 
-        private string Escape(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return "";
-            return value.Replace(",", ";");
-        }
-
-        private string[] ParseLine(string line)
-        {
-            return line.Split(',');
-        }
-
         private List<string> ReadAllLines(string path)
         {
-            if (!File.Exists(path)) return new List<string>();
+            if (!File.Exists(path))
+            {
+                return new List<string>();
+            }
+
             var content = File.ReadAllText(path, Encoding.UTF8);
             return new List<string>(content.Split(new[] { Environment.NewLine }, StringSplitOptions.None));
         }
@@ -405,18 +519,23 @@ namespace ZL.Gear.Extensions.Data.Providers
 
         private void CheckAndRotateFile(string path)
         {
-            if (_config.MaxLinesPerFile <= 0) return;
+            if (_config.MaxLinesPerFile <= 0 || !File.Exists(path))
+            {
+                return;
+            }
 
             try
             {
                 var lineCount = File.ReadLines(path).Count();
-                if (lineCount > _config.MaxLinesPerFile)
+                if (lineCount <= _config.MaxLinesPerFile)
                 {
-                    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                    var newPath = path.Replace(".csv", $"_{timestamp}.csv");
-                    File.Move(path, newPath);
-                    InitializeFiles();
+                    return;
                 }
+
+                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var newPath = path.Replace(".csv", $"_{timestamp}.csv");
+                File.Move(path, newPath);
+                InitializeFiles();
             }
             catch (Exception ex)
             {

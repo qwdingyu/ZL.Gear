@@ -47,6 +47,13 @@ namespace ZL.Gear.Extensions.Data.Tests
         }
 
         [Test]
+        public void Constructor_MySql_抛出NotSupportedException()
+        {
+            Assert.Throws<NotSupportedException>(() =>
+                new SqlDatabaseStorageProvider("Server=localhost;", DatabaseType.MySql));
+        }
+
+        [Test]
         public async Task SaveAsync_保存测试结果成功()
         {
             var result = CreateTestResultModel("TEST001", "MODEL-A");

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ZL.Gear.Extensions.Data;
 using ZL.Gear.Extensions.Data.Abstractions;
@@ -66,6 +67,73 @@ namespace ZL.Gear.Extensions.Data.Tests
             var saved = await _provider.SaveAsync(result);
 
             Assert.IsTrue(saved);
+            Assert.Greater(result.Id, 0);
+            Assert.That(result.Items, Is.All.Matches<TestItemModel>(i => i.TestResultsId == result.Id && i.Id > 0));
+        }
+
+        [Test]
+        public async Task SaveAsync_两条记录主从Id互不冲突()
+        {
+            var first = CreateTestResultModel("BAR_A", "MODEL-A");
+            var second = CreateTestResultModel("BAR_B", "MODEL-A");
+
+            await _provider.SaveAsync(first);
+            await _provider.SaveAsync(second);
+
+            Assert.AreNotEqual(first.Id, second.Id);
+
+            var queriedA = await _provider.QueryByBarcodeAsync("BAR_A");
+            var queriedB = await _provider.QueryByBarcodeAsync("BAR_B");
+
+            Assert.AreEqual(1, queriedA.Count);
+            Assert.AreEqual(1, queriedB.Count);
+            Assert.AreEqual(first.Id, queriedA[0].Id);
+            Assert.AreEqual(second.Id, queriedB[0].Id);
+            Assert.That(queriedA[0].Items, Is.All.Matches<TestItemModel>(i => i.TestResultsId == first.Id));
+            Assert.That(queriedB[0].Items, Is.All.Matches<TestItemModel>(i => i.TestResultsId == second.Id));
+        }
+
+        [Test]
+        public async Task SaveAsync_并发写入分配唯一主Id()
+        {
+            const int count = 50;
+            var tasks = Enumerable.Range(0, count).Select(i =>
+                _provider.SaveAsync(CreateTestResultModel($"CONC_{i:D3}", "MODEL-A")));
+
+            await Task.WhenAll(tasks);
+
+            var (_, total) = await _provider.QueryPagedAsync(1, count + 10);
+            Assert.AreEqual(count, total);
+        }
+
+        [Test]
+        public async Task SaveAsync_逗号字段可正确往返()
+        {
+            var result = CreateTestResultModel("COMMA_TEST", "MODEL-A");
+            result.Items[0].TestValue = "12,5";
+
+            await _provider.SaveAsync(result);
+
+            var queried = await _provider.QueryByBarcodeAsync("COMMA_TEST");
+            Assert.AreEqual(1, queried.Count);
+            Assert.AreEqual("12,5", queried[0].Items[0].TestValue);
+        }
+
+        [Test]
+        public async Task UpdateUploadStatusAsync_仅更新指定主Id()
+        {
+            var first = CreateTestResultModel("UP_A", "MODEL-A");
+            var second = CreateTestResultModel("UP_B", "MODEL-A");
+            await _provider.SaveAsync(first);
+            await _provider.SaveAsync(second);
+
+            var updated = await _provider.UpdateUploadStatusAsync(first.Id, true, "ok");
+            Assert.IsTrue(updated);
+
+            var a = await _provider.QueryByBarcodeAsync("UP_A");
+            var b = await _provider.QueryByBarcodeAsync("UP_B");
+            Assert.IsTrue(a[0].IsTransmitted);
+            Assert.IsFalse(b[0].IsTransmitted);
         }
 
         [Test]

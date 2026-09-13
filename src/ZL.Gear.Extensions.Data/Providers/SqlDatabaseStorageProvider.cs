@@ -24,6 +24,7 @@ namespace ZL.Gear.Extensions.Data.Providers
         {
             _db = db ?? throw new ArgumentNullException(nameof(db));
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            EnsureSQLiteOnly();
         }
 
         public SqlDatabaseStorageProvider(string connectionString, Enums.DatabaseType dbType)
@@ -34,14 +35,17 @@ namespace ZL.Gear.Extensions.Data.Providers
                 ConnectionString = connectionString,
                 CommandTimeout = 30
             };
+            EnsureSQLiteOnly();
             _db = DbContextFactory.Create(connectionString, dbType);
         }
 
         public Task InitializeAsync()
         {
+            EnsureSQLiteOnly();
             try
             {
-                var sql = @"
+                // SQLite 专用 DDL：与 TestResultEntity/ResultItemEntity 字段对齐；非 CodeFirst 以避免 netstandard2.0 映射差异。
+                const string sql = @"
                     CREATE TABLE IF NOT EXISTS TestResults (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
                         Barcode TEXT NOT NULL,
@@ -54,7 +58,7 @@ namespace ZL.Gear.Extensions.Data.Providers
                         TransmitTime DATETIME,
                         TransmitMessage TEXT
                     );
-                    
+
                     CREATE TABLE IF NOT EXISTS ResultItems (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
                         TestResultsId INTEGER NOT NULL,
@@ -67,20 +71,26 @@ namespace ZL.Gear.Extensions.Data.Providers
                         MetricValue REAL,
                         TestResult TEXT,
                         StepStartTime DATETIME
-                    );
-                ";
-                
+                    );";
+
                 _db.Ado.ExecuteCommand(sql);
-                
-                Console.WriteLine("[SqlDatabaseStorageProvider] 表初始化成功");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SqlDatabaseStorageProvider] 初始化表结构失败: {ex.Message}");
-                Console.WriteLine($"[SqlDatabaseStorageProvider] 异常类型: {ex.GetType().FullName}");
-                Console.WriteLine($"[SqlDatabaseStorageProvider] 堆栈跟踪: {ex.StackTrace}");
+                throw new StorageInitializationException("SQLite 表结构初始化失败。", ex);
             }
+
             return Task.CompletedTask;
+        }
+
+        private void EnsureSQLiteOnly()
+        {
+            if (_config.DbType != Enums.DatabaseType.SQLite)
+            {
+                throw new NotSupportedException(
+                    "SqlDatabaseStorageProvider 当前仅支持 SQLite。" +
+                    "MySQL / SQL Server 将在多数据库方言适配完成后提供；请设置 DatabaseConfiguration.DbType = SQLite。");
+            }
         }
 
         public Task<bool> SaveAsync(TestResultModel result)
@@ -92,10 +102,7 @@ namespace ZL.Gear.Extensions.Data.Providers
                 _db.Ado.BeginTran();
 
                 var masterEntity = result.ToMasterEntity();
-                _db.Insertable(masterEntity).ExecuteCommand();
-                var scalarResult = _db.Ado.GetScalar("SELECT LAST_INSERT_ROWID()");
-                long masterId = Convert.ToInt64(scalarResult);
-
+                var masterId = _db.Insertable(masterEntity).ExecuteReturnBigIdentity();
                 result.Id = masterId;
 
                 if (result.Items.Any())
@@ -212,12 +219,14 @@ namespace ZL.Gear.Extensions.Data.Providers
                 var countSql = "SELECT COUNT(*) FROM TestResults WHERE 1=1";
                 var queryParams = new Dictionary<string, object>();
 
+                // SQLite 专用：模糊匹配使用 GLOB（_ 为字面量）；LIKE 会将 _ 当作单字符通配符导致误匹配。
                 if (!string.IsNullOrEmpty(barcode))
                 {
                     whereClause += " AND Barcode GLOB @Barcode";
                     countSql += " AND Barcode GLOB @Barcode";
                     queryParams.Add("Barcode", $"*{barcode}*");
                 }
+
                 if (!string.IsNullOrEmpty(model))
                 {
                     whereClause += " AND Model GLOB @Model";
@@ -226,11 +235,11 @@ namespace ZL.Gear.Extensions.Data.Providers
                 }
 
                 var total = _db.Ado.SqlQuery<int>(countSql, queryParams).FirstOrDefault();
-                
                 var offset = (page - 1) * pageSize;
-                var pagedSql = $@"SELECT * FROM TestResults {whereClause} ORDER BY TestStartTime DESC LIMIT @Limit OFFSET @Offset";
-                queryParams.Add("Limit", pageSize);
-                queryParams.Add("Offset", offset);
+                var pagedSql =
+                    $@"SELECT * FROM TestResults {whereClause} ORDER BY TestStartTime DESC LIMIT @Limit OFFSET @Offset";
+                queryParams["Limit"] = pageSize;
+                queryParams["Offset"] = offset;
 
                 var results = new List<TestResultModel>();
                 using (var dt = _db.Ado.GetDataTable(pagedSql, queryParams))
@@ -239,7 +248,7 @@ namespace ZL.Gear.Extensions.Data.Providers
                     {
                         var entity = MapDataRowToTestResultEntity(row);
                         var modelObj = entity.ToModel();
-                        modelObj.Items = await QueryDetailsAsync(modelObj.Id);
+                        modelObj.Items = await QueryDetailsAsync(modelObj.Id).ConfigureAwait(false);
                         results.Add(modelObj);
                     }
                 }
