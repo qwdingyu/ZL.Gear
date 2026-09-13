@@ -75,6 +75,11 @@ if grep -qE 'public static (Action|Func)' src/ZL.Gear.Core/Events/GlobalEvents.c
   fail "G-C1: GlobalEvents 仍含 static Action/Func"
 fi
 
+# 豁免登记（2026-09-13 · 184 §五 P1-2）：
+#   ZL.Gear.Sensing/SensingLog.cs 的 static Action（Default/Debug/Info/Warn/Error）为
+#   「通用日志门面」，非 UI/PLC/行业订阅端口，不在 G-C1 语义范围；G-C1 仅约束 GlobalEvents.cs。
+#   若未来扩展 G-C1 词表覆盖 Sensing，必须在此显式豁免，避免误报。
+
 # G-C2：Core 无 ParseSensorSpecs / 中文传感器键解析
 if rg -l 'ParseSensorSpecs|class SensorSpec' src/ZL.Gear.Core --glob '*.cs' 2>/dev/null; then
   fail "G-C2: Core 仍含 ParseSensorSpecs 或 SensorSpec"
@@ -120,5 +125,21 @@ fi
 if rg -l 'PlcAutoManualEvent|PlcLocationEvent|UiPlcEvents' src/ZL.Gear.Sensing --glob '*.cs' 2>/dev/null; then
   fail "G-C10: Sensing 仍引用座椅 PLC 事件类型（须用泛型 IEvent + 宿主注入）"
 fi
+
+# P1-5：sln 引用完整性（路径存在 + 被 git 跟踪）——D1/D5 防复发
+#   D1：Exts.sln 曾引用 ..\ZL.Gear\demos\SeatDemo（不存在）→ sln 无法加载
+#   D5：Demos.sln 引用的 SeatDemo/InstrumentTest 曾未被 git 跟踪 → 干净 clone 构建失败
+while IFS= read -r sln; do
+  while IFS= read -r proj; do
+    [ -n "$proj" ] || continue
+    rel="${proj//\\//}"
+    if [ ! -f "$rel" ]; then
+      fail "P1-5: $sln 引用的项目不存在: $rel"
+    fi
+    if ! git ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
+      fail "P1-5: $sln 引用未跟踪项目: $rel"
+    fi
+  done < <(grep -oE '"[^"]+\.csproj"' "$sln" | tr -d '"' || true)
+done < <(find . -maxdepth 1 -name '*.sln' | sort)
 
 echo "✅ public-guard 通过"
