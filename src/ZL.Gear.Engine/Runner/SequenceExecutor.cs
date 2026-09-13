@@ -443,6 +443,29 @@ namespace ZL.Gear.Engine.Runner
             _log($"[执行] {stepConfig.StepName}...");
             _log($"[诊断] 步骤 {stepConfig.StepKey} 有 {stepConfig.SubSteps?.Count ?? 0} 个子步骤");
 
+            // ====================================================================
+            // 主从信令（180 G6-08b）：被其它步骤 DependsOn 的「主步骤」，
+            // 在其自身执行边界自动发出「开始 / 结束」信号，补齐该契约缺失的【发出方】。
+            //
+            // 契约：从属步骤（典型如 NoiseTestByEvent）通过
+            //       Variables.TryGetSignalPair(DependsOn) 取得主步骤的信令对，
+            //       先等 StartSignal（主步骤开始），再等 EndSignalCts（主步骤结束）。
+            // 背景：legacy 中这两个信号由 PLC/UI 事件驱动；迁移到公开执行链后，若主步骤
+            //       既未显式调用 Sync.SignalStart / Sync.StopMaster，又无人代发信号，
+            //       从属步骤将永久阻塞（实测：噪音步骤超时 60s，见 184 §3.4）。
+            //
+            // 幂等性：TaskCompletionSource.TrySetResult 与 CancellationTokenSource.Cancel
+            //         均可重复调用；与配方显式使用的 Sync.* 动作并存时结果一致，不冲突。
+            // 开销：  仅当 TryGetSignalPair 命中（确为该主步骤）时才操作，非主步骤零副作用。
+            // ====================================================================
+            var isMasterStep = context.Variables.TryGetSignalPair(stepConfig.StepKey, out var masterSignals);
+            if (isMasterStep)
+            {
+                // 【开始信号】主步骤一进入执行，即唤醒所有等待它的从属步骤。
+                masterSignals.StartSignal.TrySetResult(true);
+                _log($"[信令] 主步骤 {stepConfig.StepKey} 已发出「开始」信号");
+            }
+
             try
             {
                 // 1. 如果有子步骤，先执行子步骤
@@ -550,6 +573,24 @@ namespace ZL.Gear.Engine.Runner
                 stepResult.DurationSeconds = (sw.Elapsed.TotalSeconds).ToString("F2");
                 stepResult.EndTime = DateTime.Now;
                 stepResult.Status = StepExecutionStatus.Completed;
+
+                // ====================================================================
+                // 【结束信号】主步骤无论成功 / 失败 / 异常 / 取消，都必须唤醒从属步骤，
+                //   否则从属步骤会一直停在一个永不触发的令牌上（180 G6-08b 的根因）。
+                //   置于 finally 可保证不变式：步骤生命周期一结束 ⇒ 从属步骤必然被释放。
+                // ====================================================================
+                if (isMasterStep)
+                {
+                    try
+                    {
+                        masterSignals.EndSignalCts.Cancel();
+                        _log($"[信令] 主步骤 {stepConfig.StepKey} 已发出「结束」信号");
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // 令牌源可能已随作用域提前释放；此时从属步骤亦已随作用域结束，安全忽略。
+                    }
+                }
 
                 var outcomeDisplay = stepResult.Outcome == StepOutcome.Passed ? "PASS" : stepResult.Outcome.ToString().ToUpper();
                 _logger?.LogInformation($"[{outcomeDisplay}] {stepConfig.StepName} 耗时={stepResult.DurationSeconds:F2}s, 消息: {stepResult.Message}");
