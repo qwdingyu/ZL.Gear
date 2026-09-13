@@ -92,10 +92,10 @@ namespace ZL.Gear.Sensing.Orchestration
                     if (result.SpecPassed)
                         return ExecutionResult<double>.Succeeded(result.Value, result.AllSamples.Count, result.Message);
                     else
-                        return ExecutionResult<double>.Failed($"规格检查失败: {result.Message}", result.Value, result.AllSamples.Count);
+                        return ExecutionResult<double>.FailedWithSamples($"规格检查失败: {result.Message}", result.Value, result.AllSamples.Count);
                 }
 
-                return ExecutionResult<double>.Failed(result.Message, result.Value, result.AllSamples.Count);
+                return ExecutionResult<double>.FailedWithSamples(result.Message, result.Value, result.AllSamples.Count);
             }
             catch (Exception ex)
             {

@@ -63,7 +63,7 @@ namespace ZL.Gear.Sensing
 
             return isOverallSuccess
                 ? ExecutionResult<T>.Succeeded(internalResult.Value, internalResult.AllSamples.Count, msg)
-                : ExecutionResult<T>.Failed(msg, internalResult.Value, internalResult.AllSamples.Count);
+                : ExecutionResult<T>.FailedWithSamples(msg, internalResult.Value, internalResult.AllSamples.Count);
         }
 
         private SamplingConfig<T> PrepareConfig<T>(StepContext context, SamplingConfig<T> baseConfig)
