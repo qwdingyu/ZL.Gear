@@ -45,7 +45,7 @@ namespace ZL.Gear.Core.Configuration
         }
 
         /// <summary>
-        /// 盐城 legacy 使用 SeatProfile.json；新库使用 DeviceProfile.json。
+        /// legacy 使用 SeatProfile.json；新库使用 DeviceProfile.json。
         /// </summary>
         private static string ResolveDeviceProfilePath(string libraryDir)
         {
