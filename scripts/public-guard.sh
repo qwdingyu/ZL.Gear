@@ -106,6 +106,11 @@ if rg -l "$G0_10_PATTERN" src --glob '*.cs' --glob '!**/tests/**' 2>/dev/null; t
   fail "G0-10: 公开 src 仍含行业关键词（见 179 §6.3 扩展词表）"
 fi
 
+# G-C8：DeviceNotifier 不得保留 static Action/Func（已收敛为 IEventBus typed event）
+if rg -l 'public static (Action|Func)' src/ZL.Gear.Core/Events/DeviceNotifier.cs 2>/dev/null; then
+  fail "G-C8: DeviceNotifier 仍含 static Action/Func"
+fi
+
 # G-C9：公开仓不得提供 Seat 命名 Bootstrap 类
 if rg -l 'class Seat\w*Bootstrap|SeatProductionHostBootstrap' src demos --glob '*.cs' 2>/dev/null; then
   fail "G-C9: 公开仓仍含 Seat 命名 Bootstrap 类"
