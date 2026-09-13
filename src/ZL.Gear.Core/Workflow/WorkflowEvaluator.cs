@@ -95,6 +95,28 @@ namespace ZL.Gear.Core.Workflow
             });
         }
 
+        /// <inheritdoc />
+        public bool TryValidateConditionSyntax(string expression, out string errorMessage)
+        {
+            errorMessage = null;
+            if (string.IsNullOrWhiteSpace(expression))
+            {
+                return true;
+            }
+
+            try
+            {
+                // 空变量表：仅验证 DynamicExpresso 能否解析为 bool；未定义标识符在运行期再绑定
+                _interpreter.Parse(expression, typeof(bool), BuildParameters(new Dictionary<string, object>()));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+        }
+
         /// <summary>供测试/论证：列出将被提升为裸标识符的键。</summary>
         public static List<string> ListPromotableKeys(IDictionary<string, object> variables)
         {

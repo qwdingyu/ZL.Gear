@@ -29,5 +29,13 @@ namespace ZL.Gear.Core.Workflow
         /// 解析字符串中的插值（如 "当前电压: ${Volt} V"）。
         /// </summary>
         string Interpolate(string text, IDictionary<string, object> variables);
+
+        /// <summary>
+        /// 编译期布尔条件语法预检（不依赖运行时变量值；变量未定义时仅校验表达式结构）。
+        /// </summary>
+        /// <param name="expression">Parameters.Condition 等布尔表达式。</param>
+        /// <param name="errorMessage">失败时的错误描述。</param>
+        /// <returns>语法可解析且目标类型为 bool 时返回 true。</returns>
+        bool TryValidateConditionSyntax(string expression, out string errorMessage);
     }
 }

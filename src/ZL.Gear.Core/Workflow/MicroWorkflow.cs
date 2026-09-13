@@ -651,7 +651,10 @@ namespace ZL.Gear.Core.Workflow
             if (measurements.Any(m => !m.Success))
             {
                 var failedMessages = measurements.Where(m => !m.Success).Select(m => m.Message);
-                return ExecutionResult<List<Measurement>>.Failed($"一个或多个测量失败: {string.Join("; ", failedMessages)}", measurements);
+                return ExecutionResult<List<Measurement>>.FailedWithSamples(
+                    $"一个或多个测量失败: {string.Join("; ", failedMessages)}",
+                    measurements,
+                    measurements.Count);
             }
 
             // 所有操作都成功
