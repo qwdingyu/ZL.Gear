@@ -57,18 +57,18 @@ namespace ZL.Gear.Engine.Runner.Middlewares
         {
             // 获取快照配置
             bool snapshotEnabled = true;
-            
-            if (step.Parameters != null && step.Parameters.TryGetValue("SnapshotEnabled", out var seObj))
+
+            if (step.TryGetParameter("SnapshotEnabled", out var seObj))
             {
                 bool.TryParse(seObj?.ToString(), out snapshotEnabled);
             }
 
-            if (step.Parameters != null && step.Parameters.TryGetValue("SnapshotPath", out var spObj))
+            if (step.TryGetParameter("SnapshotPath", out var spObj))
             {
                 _snapshotPath = spObj?.ToString() ?? _snapshotPath;
             }
 
-            if (step.Parameters != null && step.Parameters.TryGetValue("SnapshotMaxCount", out var smcObj))
+            if (step.TryGetParameter("SnapshotMaxCount", out var smcObj))
             {
                 int.TryParse(smcObj?.ToString(), out _maxSnapshotCount);
             }

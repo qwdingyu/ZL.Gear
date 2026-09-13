@@ -83,14 +83,14 @@ namespace ZL.Gear.Engine
         {
             // 1. 解析 JSON 定义（WorkflowTimeoutMs 非法时清洗为缺省，不因脏超时字段整单失败）
             DynamicWorkflowConfig flowConfig = null;
-            if (step.Parameters != null && step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
+            if (step.TryGetParameter("WorkflowDefinition", out var defObj))
             {
                 if (!TryParseFlowConfig(defObj, out flowConfig, out var parseError))
                 {
                     return ExecutionResult.Failed($"工作流定义解析失败: {parseError}");
                 }
             }
-            else if (step.Parameters != null && (step.Parameters.ContainsKey("Sequence") || step.Parameters.ContainsKey("sequence")))
+            else if (step.HasParameter("Sequence") || step.HasParameter("sequence"))
             {
                 if (!TryParseFlowConfig(step.Parameters, out flowConfig, out var parseError))
                 {

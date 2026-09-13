@@ -4,8 +4,36 @@ using System.Globalization;
 
 namespace ZL.Gear.Core.Utils
 {
+    /// <summary>
+    /// 字典扩展方法集合：统一大小写敏感、安全读取、默认值合并、类型转换等常见字典操作。
+    /// </summary>
+    /// <remarks>
+    /// <para><strong>设计意图</strong>：工控参数表、流程变量、设备配置等场景大量使用 <c>Dictionary&lt;string, object&gt;</c>，
+    /// 且键经常需要忽略大小写、值经常需要从 object 安全转换为目标类型。
+    /// 本类把这些样板收敛到统一扩展方法，避免每个调用方重复写 null 检查、TryGetValue、Convert.ChangeType 等代码。</para>
+    /// <para><strong>使用原则</strong>：
+    /// <list type="bullet">
+    /// <item>需要忽略大小写字典时，优先使用 <see cref="CreateOrdinalIgnoreCaseDictionary"/> 工厂方法。</item>
+    /// <item>读取不确定类型的值时，优先使用 <see cref="TryGet{T}(IReadOnlyDictionary{string, object}, string, out T)"/> 或 <see cref="Get{T}(IDictionary{string, object}, string, T)"/>。</item>
+    /// <item>合并多个来源的默认值时，使用 <see cref="ApplyDefaults{TKey, TValue}(IDictionary{TKey, TValue}, IDictionary{TKey, TValue})"/>。</item>
+    /// </list>
+    /// </remarks>
     public static class DictionaryExtensions
     {
+        /// <summary>
+        /// 创建一个忽略大小写的字符串键字典（值类型为 <c>object</c>）。
+        /// </summary>
+        /// <returns>使用 <see cref="StringComparer.OrdinalIgnoreCase"/> 构造的空字典。</returns>
+        /// <remarks>
+        /// <para><strong>适用场景</strong>：变量表、参数表、设备角色映射等键名不区分大小写的配置字典。</para>
+        /// <para>集中到这里可以避免多处手写 <c>new Dictionary&lt;string, object&gt;(StringComparer.OrdinalIgnoreCase)</c>，
+        /// 也便于未来统一调整字典比较器或初始容量。</para>
+        /// </remarks>
+        public static Dictionary<string, object> CreateOrdinalIgnoreCaseDictionary()
+        {
+            return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// 尝试将指定的键和值添加到字典中。
         /// （为旧版 .NET Framework 提供 .NET Core 风格的 TryAdd 方法）
@@ -15,9 +43,10 @@ namespace ZL.Gear.Core.Utils
         /// <param name="dictionary">要向其中添加元素的目标字典。</param>
         /// <param name="key">要添加的元素的键。</param>
         /// <param name="value">要添加的元素的值。</param>
+        /// <param name="replace">如果键已存在，是否覆盖原值。</param>
         /// <returns>
-        /// 如果成功添加了键/值对，则返回 true；
-        /// 如果字典中已存在具有相同键的元素，则返回 false。
+        /// 如果成功添加或覆盖了键/值对，则返回 <c>true</c>；
+        /// 如果字典中已存在具有相同键的元素且 <paramref name="replace"/> 为 <c>false</c>，则返回 <c>false</c>。
         /// </returns>
         public static bool TryAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue value, bool replace = false)
         {
@@ -35,6 +64,19 @@ namespace ZL.Gear.Core.Utils
             }
             return false;
         }
+        /// <summary>
+        /// 从只读字典中尝试获取指定键的值，并安全转换为目标类型 <typeparamref ref="T"/>。
+        /// </summary>
+        /// <typeparam name="T">期望的目标类型。</typeparam>
+        /// <param name="dictionary">要查询的只读字典。</param>
+        /// <param name="key">要查找的键。</param>
+        /// <param name="value">转换成功时存放结果；转换失败时置为 <c>default(T)</c>。</param>
+        /// <returns>键存在且转换成功返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>
+        /// <para>转换策略：直接类型匹配 → <see cref="ConvertHelper.TryConvert{T}(object, out T)"/>。</para>
+        /// <para>与 <see cref="Get{T}(IDictionary{string, object}, string, T)"/> 的区别：
+        /// 本方法只关心“键是否存在且可转换”，不关心“转换后是否为默认值”，因此适合用于 <c>bool</c> 标志、可空类型等场景。</para>
+        /// </remarks>
         public static bool TryGet<T>(this IReadOnlyDictionary<string, object> dictionary, string key, out T value)
         {
             if (dictionary.TryGetValue(key, out object objValue))
@@ -44,15 +86,8 @@ namespace ZL.Gear.Core.Utils
                     value = directValue;
                     return true;
                 }
-                try
-                {
-                    value = (T)Convert.ChangeType(objValue, typeof(T));
-                    return true;
-                }
-                catch (Exception)
-                {
-                    // 转换失败
-                }
+
+                return ConvertHelper.TryConvert(objValue, out value);
             }
             value = default;
             return false;
@@ -95,16 +130,7 @@ namespace ZL.Gear.Core.Utils
                     }
                 }
                 // 4. 尝试进行类型转换 (例如，值是 int，但期望的是 long，或者值是字符串 "123"，期望的是 int)
-                try
-                {
-                    // 使用 Convert.ChangeType 进行更广泛的转换
-                    return (T)Convert.ChangeType(value, typeof(T));
-                }
-                catch (Exception)
-                {
-                    // 如果转换失败 (例如，尝试将 "hello" 转换为 int)，则返回默认值
-                    return defaultValue;
-                }
+                return ConvertHelper.ConvertOrDefault(value, defaultValue);
             }
 
             // 5. 如果键不存在，返回默认值
@@ -118,22 +144,15 @@ namespace ZL.Gear.Core.Utils
             if (dict == null || !dict.ContainsKey(key))
                 return defVal;
 
-            try
-            {
-                object value = dict[key];
+            object value = dict[key];
 
-                if (value == null || Convert.IsDBNull(value))
-                    return defVal;
-
-                if (value is T typedValue)
-                    return typedValue;
-
-                return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
-            }
-            catch
-            {
+            if (value == null || Convert.IsDBNull(value))
                 return defVal;
-            }
+
+            if (value is T typedValue)
+                return typedValue;
+
+            return ConvertHelper.ConvertOrDefault(value, defVal);
         }
 
         /// <summary>
@@ -313,27 +332,7 @@ namespace ZL.Gear.Core.Utils
         /// <summary>
         /// 辅助方法：判断一个类型是否为数字类型。
         /// </summary>
-        private static bool IsNumericType(Type type)
-        {
-            if (type == null) return false;
-            switch (Type.GetTypeCode(type))
-            {
-                case TypeCode.Byte:
-                case TypeCode.SByte:
-                case TypeCode.UInt16:
-                case TypeCode.UInt32:
-                case TypeCode.UInt64:
-                case TypeCode.Int16:
-                case TypeCode.Int32:
-                case TypeCode.Int64:
-                case TypeCode.Decimal:
-                case TypeCode.Double:
-                case TypeCode.Single:
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        private static bool IsNumericType(Type type) => TypeHelper.IsNumeric(type);
         /// <summary>
         /// 从字典中获取一个值，并尝试将其解析为 uint。
         /// 支持十进制字符串 ("1888") 和十六进制字符串 ("0x760", "760")。

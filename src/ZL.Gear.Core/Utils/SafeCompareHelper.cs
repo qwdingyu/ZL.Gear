@@ -76,17 +76,7 @@ namespace ZL.Gear.Core.Utils
         /// <summary>
         /// 检查是否为数值类型
         /// </summary>
-        private static bool IsNumericType(Type type)
-        {
-            if (type == null) return false;
-
-            type = Nullable.GetUnderlyingType(type) ?? type; // 处理可空类型
-
-            return type == typeof(int) || type == typeof(long) || type == typeof(float) ||
-                   type == typeof(double) || type == typeof(decimal) || type == typeof(short) ||
-                   type == typeof(byte) || type == typeof(sbyte) || type == typeof(ushort) ||
-                   type == typeof(uint) || type == typeof(ulong);
-        }
+        private static bool IsNumericType(Type type) => TypeHelper.IsNumeric(type);
 
         /// <summary>
         /// 数值类型的比较

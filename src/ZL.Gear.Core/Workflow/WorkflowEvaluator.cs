@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ZL.Gear.Core.Utils;
 
 namespace ZL.Gear.Core.Workflow
 {
@@ -149,7 +150,7 @@ namespace ZL.Gear.Core.Workflow
         {
             type = typeof(object);
             value = null;
-            var v = Unwrap(raw);
+            var v = JsonValueHelper.Unwrap(raw);
             if (v == null)
             {
                 type = typeof(object);
@@ -194,35 +195,14 @@ namespace ZL.Gear.Core.Workflow
             return false;
         }
 
-        private static bool IsNumeric(object v)
-        {
-            switch (Type.GetTypeCode(v.GetType()))
-            {
-                case TypeCode.Byte:
-                case TypeCode.SByte:
-                case TypeCode.Int16:
-                case TypeCode.UInt16:
-                case TypeCode.Int32:
-                case TypeCode.UInt32:
-                case TypeCode.Int64:
-                case TypeCode.UInt64:
-                case TypeCode.Single:
-                case TypeCode.Double:
-                case TypeCode.Decimal:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private static object Unwrap(object value) => value is JValue jv ? jv.Value : value;
+        private static bool IsNumeric(object v) => TypeHelper.IsNumeric(v);
 
         private static IDictionary<string, object> NormalizeVars(IDictionary<string, object> variables)
         {
-            var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            var dict = DictionaryExtensions.CreateOrdinalIgnoreCaseDictionary();
             if (variables == null) return dict;
             foreach (var kvp in variables)
-                dict[kvp.Key] = Unwrap(kvp.Value);
+                dict[kvp.Key] = JsonValueHelper.Unwrap(kvp.Value);
             return dict;
         }
     }

@@ -18,14 +18,14 @@ namespace ZL.Gear.Engine.Runner.Middlewares
         {
             // 如果步骤没有目标设备，或者显式标记为不加锁，则直接跳过
             if (string.IsNullOrEmpty(step.Target) ||
-                (step.Parameters != null && step.Parameters.TryGetValue("SkipLock", out var sl) && sl.ToString().ToLower() == "true"))
+                (step.TryGetParameter("SkipLock", out var sl) && sl.ToString().ToLower() == "true"))
             {
                 return await next(step, context).ConfigureAwait(false);
             }
 
             // 默认等待锁超时 10 秒
             int lockTimeout = 10000;
-            if (step.Parameters != null && step.Parameters.TryGetValue("LockTimeoutMs", out var ltObj))
+            if (step.TryGetParameter("LockTimeoutMs", out var ltObj))
             {
                 int.TryParse(ltObj.ToString(), out lockTimeout);
             }

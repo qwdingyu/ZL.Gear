@@ -279,18 +279,16 @@ namespace ZL.Gear.Core.Models
             switch (source)
             {
                 case StepArgSource.ArgsOnly:
-                    if (_step.Parameters == null || !_step.Parameters.ContainsKey(key))
+                    if (!_step.HasParameter(key))
                     {
                         error = FormatMissing(key);
                         return false;
                     }
-                    raw = _step.Parameters[key];
+                    _step.TryGetParameter(key, out raw);
                     return true;
 
                 case StepArgSource.ArgsThenVariables:
-                    if (_step.Parameters != null
-                        && _step.Parameters.TryGetValue(key, out var fromArgs)
-                        && fromArgs != null)
+                    if (_step.TryGetParameter(key, out var fromArgs) && fromArgs != null)
                     {
                         raw = fromArgs;
                         return true;
@@ -304,7 +302,7 @@ namespace ZL.Gear.Core.Models
                     return false;
 
                 case StepArgSource.All:
-                    if (requireArgKey && (_step.Parameters == null || !_step.Parameters.ContainsKey(key)))
+                    if (requireArgKey && !_step.HasParameter(key))
                     {
                         error = FormatMissing(key);
                         return false;
@@ -344,6 +342,21 @@ namespace ZL.Gear.Core.Models
             }
         }
 
+        /// <summary>
+        /// 将原始参数值安全转换为 <see cref="double"/>。
+        /// </summary>
+        /// <param name="raw">原始值，可能来自 <c>Args</c>、<c>Variables</c> 或 <c>GlobalContext</c>。</param>
+        /// <param name="value">转换成功时存放结果；转换失败时置为 <c>0.0</c>。</param>
+        /// <returns>转换成功返回 <c>true</c>；转换失败返回 <c>false</c>。</returns>
+        /// <remarks>
+        /// <para><strong>转换顺序</strong>：
+        /// <list type="number">
+        /// <item>直接类型匹配：<c>double / float / int / long</c> 快速路径，避免装箱转换。</item>
+        /// <item>Newtonsoft.Json 残留 <see cref="JValue"/> 递归解包：提取底层值后再次尝试转换。</item>
+        /// <item><c>double.TryParse</c> 兜底：使用 <see cref="CultureInfo.InvariantCulture"/> 和 <see cref="NumberStyles.Float"/>，
+        /// 确保小数点与指数格式在工控多语言环境下稳定解析。</item>
+        /// </list>
+        /// </remarks>
         private static bool TryToDouble(object raw, out double value)
         {
             if (raw is double d)

@@ -50,17 +50,12 @@ namespace ZL.Gear.Core.Utils
             }
 
             // Case 3: 值是一个单一元素
-            try
+            var convertedValue = ConvertHelper.ConvertOrDefault(value, default(T));
+            if (EqualityComparer<T>.Default.Equals(convertedValue, default(T)) && !(value is T))
             {
-                // 尝试将单个值转换为目标类型，然后放入一个单元素的数组中
-                var convertedValue = (T)Convert.ChangeType(value, typeof(T));
-                return new T[] { convertedValue };
-            }
-            catch (Exception ex)
-            {
-                // LogKit.Error($"Failed to convert single value '{value}' to {typeof(T).Name}: {ex.Message}");
                 return Array.Empty<T>();
             }
+            return new T[] { convertedValue };
         }
     }
 

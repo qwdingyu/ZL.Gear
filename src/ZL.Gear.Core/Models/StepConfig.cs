@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Newtonsoft.Json;
+using ZL.Gear.Core.Utils;
 
 namespace ZL.Gear.Core.Models
 {
@@ -144,9 +145,73 @@ namespace ZL.Gear.Core.Models
         {
             if (Parameters != null && Parameters.TryGetValue(key, out var val))
             {
-                try { return (T)Convert.ChangeType(val, typeof(T)); } catch { }
+                return ConvertHelper.ConvertOrDefault(val, defaultValue);
             }
             return defaultValue;
+        }
+
+        /// <summary>
+        /// 尝试从 <see cref="Parameters"/> 中获取指定键的值，并安全转换为目标类型 <typeparamref ref="T"/>。
+        /// </summary>
+        /// <typeparam name="T">期望的目标类型。</typeparam>
+        /// <param name="key">参数键名。</param>
+        /// <param name="value">转换成功时存放结果；转换失败或键不存在时置为 <c>default(T)</c>。</param>
+        /// <returns>键存在且转换成功返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>
+        /// <para><strong>转换顺序</strong>：直接类型匹配 → <see cref="ConvertHelper.TryConvert{T}(object, out T)"/>。</para>
+        /// <para><strong>适用场景</strong>：Handler / Middleware 读取 <c>step.Parameters</c> 中的数值、布尔、字符串等配置项。</para>
+        /// <para><strong>注意</strong>：若键存在但值为 <c>null</c>，转换将失败并返回 <c>false</c>，不会把 <c>null</c> 隐式转为 <c>default(T)</c>。</para>
+        /// </remarks>
+        public bool TryGetParameter<T>(string key, out T value)
+        {
+            if (Parameters != null && Parameters.TryGetValue(key, out var val))
+            {
+                if (val is T direct)
+                {
+                    value = direct;
+                    return true;
+                }
+
+                return ConvertHelper.TryConvert(val, out value);
+            }
+            value = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试从 <see cref="Parameters"/> 中获取指定键的原始值（不进行类型转换）。
+        /// </summary>
+        /// <param name="key">参数键名。</param>
+        /// <param name="value">键存在时存放原始值；键不存在时置为 <c>null</c>。</param>
+        /// <returns>键存在返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>
+        /// <para><strong>适用场景</strong>：调用方需要原始 <c>object</c> 值进行进一步判断或自定义转换时使用，
+        /// 例如读取 <c>WorkflowDefinition</c> 原始对象后再决定如何反序列化。</para>
+        /// </remarks>
+        public bool TryGetParameter(string key, out object value)
+        {
+            if (Parameters != null && Parameters.TryGetValue(key, out var val))
+            {
+                value = val;
+                return true;
+            }
+            value = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 检查 <see cref="Parameters"/> 中是否包含指定键（不关心值）。
+        /// </summary>
+        /// <param name="key">要检查的参数键名。</param>
+        /// <returns>如果 <see cref="Parameters"/> 不为 <c>null</c> 且包含该键，返回 <c>true</c>；否则返回 <c>false</c>。</returns>
+        /// <remarks>
+        /// <para><strong>适用场景</strong>：快速判断某参数是否存在，常用于可选参数的开关逻辑，例如 <c>HasParameter("SkipLock")</c>。</para>
+        /// <para><strong>注意</strong>：由于 <see cref="Parameters"/> 在构造函数中默认初始化为空字典，
+        /// 正常情况下不会为 <c>null</c>，但本方法仍保留 null 检查以防御外部反序列化场景。</para>
+        /// </remarks>
+        public bool HasParameter(string key)
+        {
+            return Parameters != null && Parameters.ContainsKey(key);
         }
 
         // --- 结构定义 ---

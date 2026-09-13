@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
+using ZL.Gear.Core.Utils;
 
 namespace ZL.Gear.Core.Models
 {
@@ -38,7 +39,7 @@ namespace ZL.Gear.Core.Models
         public void Set<T>(string key, T value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            _store[key] = Unwrap(value);
+            _store[key] = JsonValueHelper.Unwrap(value);
         }
 
         /// <summary>
@@ -57,19 +58,6 @@ namespace ZL.Gear.Core.Models
             {
                 Set(key, value);
             }
-        }
-
-        /// <summary>
-        /// 去掉 JSON 反序列化残留的 JValue，避免表达式引擎对 JValue 做算术时报 Invalid Operation。
-        /// </summary>
-        private static object Unwrap(object value)
-        {
-            if (value is JValue jv)
-            {
-                return jv.Value;
-            }
-
-            return value;
         }
 
         /// <summary>

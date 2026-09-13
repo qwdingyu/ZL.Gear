@@ -36,13 +36,13 @@ namespace ZL.Gear.Engine.Runner.Middlewares
         {
             // 获取超时配置，优先使用中间件参数，否则使用步骤配置
             int timeoutMs = step.TimeoutMs > 0 ? step.TimeoutMs : 30000;
-            if (step.Parameters != null && step.Parameters.TryGetValue("TimeoutMs", out var toObj))
+            if (step.TryGetParameter("TimeoutMs", out var toObj))
             {
                 int.TryParse(toObj?.ToString(), out timeoutMs);
             }
 
             string timeoutAction = "Fail";
-            if (step.Parameters != null && step.Parameters.TryGetValue("TimeoutAction", out var taObj))
+            if (step.TryGetParameter("TimeoutAction", out var taObj))
             {
                 timeoutAction = taObj?.ToString() ?? "Fail";
             }

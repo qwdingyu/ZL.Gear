@@ -18,13 +18,13 @@ namespace ZL.Gear.Engine.Runner.Middlewares
         {
             // 从步骤参数中获取重试配置，默认为 0 (不重试)
             int retryCount = 0;
-            if (step.Parameters != null && step.Parameters.TryGetValue("RetryCount", out var rcObj))
+            if (step.TryGetParameter("RetryCount", out var rcObj))
             {
                 int.TryParse(rcObj.ToString(), out retryCount);
             }
 
             int retryDelayMs = 500;
-            if (step.Parameters != null && step.Parameters.TryGetValue("RetryDelayMs", out var rdObj))
+            if (step.TryGetParameter("RetryDelayMs", out var rdObj))
             {
                 int.TryParse(rdObj.ToString(), out retryDelayMs);
             }

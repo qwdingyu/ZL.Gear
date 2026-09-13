@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ZL.Gear.Core.Devices;
+using ZL.Gear.Core.Utils;
 
 namespace ZL.Gear.Core.Models
 {
@@ -239,15 +240,7 @@ namespace ZL.Gear.Core.Models
         public TValue? GetValue<TValue>()
         {
             if (Value == null) return default;
-            try
-            {
-                if (Value is TValue typedValue) return typedValue;
-                return (TValue)Convert.ChangeType(Value, typeof(TValue));
-            }
-            catch
-            {
-                return default;
-            }
+            return ConvertHelper.ConvertOrDefault(Value, default(TValue));
         }
 
         /// <summary>
@@ -258,7 +251,7 @@ namespace ZL.Gear.Core.Models
             if (Metadata.TryGetValue(key, out var value))
             {
                 if (value is TValue typed) return typed;
-                try { return (TValue)Convert.ChangeType(value, typeof(TValue)); } catch { return default; }
+                return ConvertHelper.ConvertOrDefault(value, default(TValue));
             }
             return default;
         }

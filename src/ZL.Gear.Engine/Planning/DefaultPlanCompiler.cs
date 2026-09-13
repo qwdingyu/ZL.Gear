@@ -8,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Planning;
+using ZL.Gear.Core.Utils;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.Runner;
 
@@ -191,11 +192,11 @@ namespace ZL.Gear.Engine.Planning
             foreach (var step in roots)
             {
                 // 提取编译期已知变量表：WorkflowDefinition.Variables + step.Parameters
-                var knownVariables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                var knownVariables = DictionaryExtensions.CreateOrdinalIgnoreCaseDictionary();
                 if (step.Parameters != null)
                 {
                     // 1. 提取 WorkflowDefinition.Variables
-                    if (step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
+                    if (step.TryGetParameter("WorkflowDefinition", out var defObj))
                     {
                         ExtractVariablesFromWorkflowDefinition(defObj, knownVariables);
                     }
@@ -203,10 +204,7 @@ namespace ZL.Gear.Engine.Planning
                     // 2. 提取 step.Parameters 的所有键（值可能为表达式，不提取值）
                     foreach (var kvp in step.Parameters)
                     {
-                        if (!knownVariables.ContainsKey(kvp.Key))
-                        {
-                            knownVariables[kvp.Key] = null; // 键存在，值未知
-                        }
+                        knownVariables[kvp.Key] = null; // 键存在，值未知
                     }
                 }
 

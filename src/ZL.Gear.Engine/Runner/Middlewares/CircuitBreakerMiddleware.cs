@@ -116,7 +116,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
         private int GetParameter(StepConfig step, string key, int defaultValue)
         {
-            if (step.Parameters != null && step.Parameters.TryGetValue(key, out var obj))
+            if (step.TryGetParameter(key, out var obj))
             {
                 if (int.TryParse(obj?.ToString(), out var value))
                 {
@@ -128,7 +128,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
         private string GetParameterString(StepConfig step, string key, string defaultValue)
         {
-            if (step.Parameters != null && step.Parameters.TryGetValue(key, out var obj))
+            if (step.TryGetParameter(key, out var obj))
             {
                 return obj?.ToString() ?? defaultValue;
             }

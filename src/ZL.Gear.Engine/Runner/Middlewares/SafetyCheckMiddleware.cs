@@ -43,7 +43,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             Func<StepConfig, StepContext, Task<ExecutionResult<List<Measurement>>>> next)
         {
             // 检查是否启用安全检查
-            if (step.Parameters == null || !step.Parameters.ContainsKey("SafetyConditions"))
+            if (step.Parameters == null || !step.HasParameter("SafetyConditions"))
             {
                 return next(step, context);
             }
@@ -51,7 +51,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
             // 获取安全条件列表
             var conditions = step.Parameters["SafetyConditions"];
             var conditionList = ParseConditions(conditions);
-            
+
             if (conditionList.Count == 0)
             {
                 return next(step, context);
@@ -59,14 +59,14 @@ namespace ZL.Gear.Engine.Runner.Middlewares
 
             // 获取检查模式
             string checkMode = "All";
-            if (step.Parameters.TryGetValue("SafetyCheckMode", out var modeObj))
+            if (step.TryGetParameter("SafetyCheckMode", out var modeObj))
             {
                 checkMode = modeObj?.ToString() ?? "All";
             }
 
             // 获取失败时动作
             bool failOnError = true;
-            if (step.Parameters.TryGetValue("FailOnSafetyError", out var failObj))
+            if (step.TryGetParameter("FailOnSafetyError", out var failObj))
             {
                 bool.TryParse(failObj?.ToString(), out failOnError);
             }

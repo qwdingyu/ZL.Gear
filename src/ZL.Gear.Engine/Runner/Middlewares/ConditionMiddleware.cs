@@ -17,7 +17,7 @@ namespace ZL.Gear.Engine.Runner.Middlewares
     {
         public async Task<ExecutionResult<List<Measurement>>> InvokeAsync(StepConfig step, StepContext context, Func<StepConfig, StepContext, Task<ExecutionResult<List<Measurement>>>> next)
         {
-            if (step.Parameters != null && step.Parameters.TryGetValue("Condition", out var condObj) && condObj != null)
+            if (step.TryGetParameter("Condition", out var condObj) && condObj != null)
             {
                 string condition = condObj.ToString();
                 if (!string.IsNullOrWhiteSpace(condition))

@@ -14,6 +14,7 @@ using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.Services;
+using ZL.Gear.Core.Utils;
 using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine.Evaluation;
 using ZL.Gear.Engine.Infrastructure;
@@ -656,12 +657,12 @@ namespace ZL.Gear.Engine
 
         public SimpleGearProfileService()
         {
-            _deviceRoles = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            _deviceRoles = DictionaryExtensions.CreateOrdinalIgnoreCaseDictionary();
         }
 
         public SimpleGearProfileService(Dictionary<string, object> roles)
         {
-            _deviceRoles = roles ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            _deviceRoles = roles ?? DictionaryExtensions.CreateOrdinalIgnoreCaseDictionary();
         }
 
         public Dictionary<string, object> LoadDeviceRoles()

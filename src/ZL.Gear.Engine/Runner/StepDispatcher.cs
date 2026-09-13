@@ -430,7 +430,7 @@ namespace ZL.Gear.Engine.Runner
 
             // TimeoutAction：Fail（默认 Failed）/ Continue（仍 Failed 带 [TimeoutContinue]，StopByFail 不掐断；防误 PASS）
             string timeoutAction = "Fail";
-            if (step.Parameters != null && step.Parameters.TryGetValue("TimeoutAction", out var timeoutActionObj))
+            if (step.TryGetParameter("TimeoutAction", out var timeoutActionObj))
             {
                 timeoutAction = timeoutActionObj?.ToString() ?? "Fail";
             }
