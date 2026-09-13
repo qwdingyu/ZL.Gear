@@ -1,8 +1,10 @@
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using ZL.Gear.Core.Devices;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
@@ -240,6 +242,215 @@ namespace ZL.Gear.Engine.Tests
             Assert.That(run.OverallSuccess, Is.False);
             Assert.That(run.CompileErrors.Any(e => e.Code == "MISSING_HANDLER"), Is.True);
         }
+
+        #region ValidateConditionSyntax 变量表提取
+
+        [Test]
+        public void Compile_Condition引用WorkflowDefinition变量_编译成功()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "X",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Variables"] = new Dictionary<string, object>
+                            {
+                                ["Ready"] = true,
+                                ["Count"] = 5
+                            }
+                        },
+                        ["Condition"] = "Ready == true && Count > 0"
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["X"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.False);
+        }
+
+        [Test]
+        public void Compile_Condition引用StepParameters键_编译成功()
+        {
+            // step.Parameters 键会被提取到变量表，但值置为 null。
+            // 因此条件只能使用不依赖实际值类型的表达式（如 == null 或 != null）。
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "X",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["Threshold"] = 10,
+                        ["Mode"] = "Auto",
+                        ["Condition"] = "Threshold == null && Mode == null"
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["X"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.False);
+        }
+
+        [Test]
+        public void Compile_Condition引用WorkflowDefinition与Parameters合并变量_编译成功()
+        {
+            // WorkflowDefinition.Variables 提供实际值，step.Parameters 键提供 null。
+            // 条件需分别适配：GlobalFlag 为 bool，LocalParam 只能做 null 比较。
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "X",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Variables"] = new Dictionary<string, object>
+                            {
+                                ["GlobalFlag"] = true
+                            }
+                        },
+                        ["LocalParam"] = 42,
+                        ["Condition"] = "GlobalFlag == true && LocalParam == null"
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["X"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.False);
+        }
+
+        [Test]
+        public void Compile_WaitUntilCondition_跳过语法检查()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "DynamicFlow",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Sequence"] = new List<object>
+                            {
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "WaitUntil",
+                                    ["Condition"] = "Sensor.Value > 100"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["DynamicFlow"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            // WaitUntil 条件被跳过，不应报 INVALID_CONDITION（即使 Sensor 未定义）
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.False);
+        }
+
+        [Test]
+        public void Compile_混合WaitUntil与普通Condition_仅普通Condition被检查()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "DynamicFlow",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Sequence"] = new List<object>
+                            {
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "Action",
+                                    ["Condition"] = "1 + + 2"  // 语法错误
+                                },
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "WaitUntil",
+                                    ["Condition"] = "Sensor.Value > 100"  // 执行期，跳过
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["DynamicFlow"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.True);
+        }
+
+        [Test]
+        public void Compile_Condition语法错误_即使变量表完整仍failClosed()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "X",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Variables"] = new Dictionary<string, object>
+                            {
+                                ["Ready"] = true
+                            }
+                        },
+                        ["Condition"] = "1 + + 2"  // 语法错误
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["X"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.True);
+        }
+
+        #endregion
     }
 
     internal sealed class PlanCompilerTests_NeverRunHandler : IStepHandler

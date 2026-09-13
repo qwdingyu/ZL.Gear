@@ -689,8 +689,8 @@ namespace ZL.Gear.Engine
         public string Interpolate(string template, IDictionary<string, object> variables)
             => _inner.Interpolate(template, variables);
 
-        public bool TryValidateConditionSyntax(string expression, out string errorMessage)
-            => _inner.TryValidateConditionSyntax(expression, out errorMessage);
+        public bool TryValidateConditionSyntax(string expression, IDictionary<string, object> variables, out string errorMessage)
+            => _inner.TryValidateConditionSyntax(expression, variables, out errorMessage);
     }
 
     /// <summary>

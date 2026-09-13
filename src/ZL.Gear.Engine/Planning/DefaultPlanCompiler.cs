@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Models;
 using ZL.Gear.Core.Planning;
@@ -187,20 +188,73 @@ namespace ZL.Gear.Engine.Planning
             }
 
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var (stepKey, condition) in ConditionExpressionCollector.CollectFromSteps(roots))
+            foreach (var step in roots)
             {
-                var dedupeKey = (stepKey ?? "") + "\0" + condition;
-                if (!seen.Add(dedupeKey))
+                // 提取编译期已知变量表：WorkflowDefinition.Variables + step.Parameters
+                var knownVariables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                if (step.Parameters != null)
                 {
-                    continue;
+                    // 1. 提取 WorkflowDefinition.Variables
+                    if (step.Parameters.TryGetValue("WorkflowDefinition", out var defObj))
+                    {
+                        ExtractVariablesFromWorkflowDefinition(defObj, knownVariables);
+                    }
+
+                    // 2. 提取 step.Parameters 的所有键（值可能为表达式，不提取值）
+                    foreach (var kvp in step.Parameters)
+                    {
+                        if (!knownVariables.ContainsKey(kvp.Key))
+                        {
+                            knownVariables[kvp.Key] = null; // 键存在，值未知
+                        }
+                    }
                 }
 
-                if (!evaluator.TryValidateConditionSyntax(condition, out var error))
+                foreach (var (stepKey, condition, isWaitUntilCondition) in ConditionExpressionCollector.CollectFromSteps(new[] { step }))
                 {
-                    diagnostics.Add(PlanCompileDiagnostic.Error(
-                        "INVALID_CONDITION",
-                        $"条件表达式语法错误: {error}（表达式: {condition}）",
-                        stepKey));
+                    // WaitUntil.Condition 属于执行期轮询条件，运行期才注入变量，跳过构建期语法检查
+                    if (isWaitUntilCondition)
+                    {
+                        continue;
+                    }
+
+                    var dedupeKey = (stepKey ?? "") + "\0" + condition;
+                    if (!seen.Add(dedupeKey))
+                    {
+                        continue;
+                    }
+
+                    if (!evaluator.TryValidateConditionSyntax(condition, knownVariables, out var error))
+                    {
+                        diagnostics.Add(PlanCompileDiagnostic.Error(
+                            "INVALID_CONDITION",
+                            $"条件表达式语法错误: {error}（表达式: {condition}）",
+                            stepKey));
+                    }
+                }
+            }
+        }
+
+        private static void ExtractVariablesFromWorkflowDefinition(object defObj, Dictionary<string, object> target)
+        {
+            if (defObj is IDictionary<string, object> defDict && defDict.TryGetValue("Variables", out var varsObj) && varsObj is IDictionary<string, object> varsDict)
+            {
+                foreach (var kvp in varsDict)
+                {
+                    if (!target.ContainsKey(kvp.Key))
+                    {
+                        target[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            else if (defObj is JObject defJObj && defJObj["Variables"] is JToken varsToken && varsToken.Type == JTokenType.Object)
+            {
+                foreach (var prop in varsToken.Children<JProperty>())
+                {
+                    if (!target.ContainsKey(prop.Name))
+                    {
+                        target[prop.Name] = prop.Value.Type == JTokenType.Object ? prop.Value.ToString() : prop.Value.ToObject<object>();
+                    }
                 }
             }
         }

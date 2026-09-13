@@ -96,7 +96,7 @@ namespace ZL.Gear.Core.Workflow
         }
 
         /// <inheritdoc />
-        public bool TryValidateConditionSyntax(string expression, out string errorMessage)
+        public bool TryValidateConditionSyntax(string expression, IDictionary<string, object> variables, out string errorMessage)
         {
             errorMessage = null;
             if (string.IsNullOrWhiteSpace(expression))
@@ -106,8 +106,7 @@ namespace ZL.Gear.Core.Workflow
 
             try
             {
-                // 空变量表：仅验证 DynamicExpresso 能否解析为 bool；未定义标识符在运行期再绑定
-                _interpreter.Parse(expression, typeof(bool), BuildParameters(new Dictionary<string, object>()));
+                _interpreter.Parse(expression, typeof(bool), BuildParameters(variables));
                 return true;
             }
             catch (Exception ex)

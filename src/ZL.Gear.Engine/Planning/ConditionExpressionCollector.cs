@@ -9,9 +9,9 @@ namespace ZL.Gear.Engine.Planning
     /// <summary>
     /// 从 Plan 步骤树收集全部布尔条件表达式（Parameters.Condition + DynamicFlow WorkflowDefinition 内嵌 Condition）。
     /// </summary>
-    internal static class ConditionExpressionCollector
+    public static class ConditionExpressionCollector
     {
-        public static IEnumerable<(string StepKey, string Expression)> CollectFromSteps(IEnumerable<StepConfig> roots)
+        public static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromSteps(IEnumerable<StepConfig> roots)
         {
             if (roots == null)
             {
@@ -32,7 +32,7 @@ namespace ZL.Gear.Engine.Planning
             }
         }
 
-        private static IEnumerable<(string StepKey, string Expression)> CollectFromObject(object obj, string stepKey)
+        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromObject(object obj, string stepKey, bool isWaitUntil = false)
         {
             if (obj == null)
             {
@@ -46,7 +46,7 @@ namespace ZL.Gear.Engine.Planning
 
             if (obj is JObject jobj)
             {
-                foreach (var pair in CollectFromJObject(jobj, stepKey))
+                foreach (var pair in CollectFromJObject(jobj, stepKey, isWaitUntil))
                 {
                     yield return pair;
                 }
@@ -58,7 +58,7 @@ namespace ZL.Gear.Engine.Planning
             {
                 foreach (var item in jarr)
                 {
-                    foreach (var pair in CollectFromObject(item, stepKey))
+                    foreach (var pair in CollectFromObject(item, stepKey, isWaitUntil))
                     {
                         yield return pair;
                     }
@@ -69,6 +69,12 @@ namespace ZL.Gear.Engine.Planning
 
             if (obj is IDictionary<string, object> dict)
             {
+                // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
+                if (dict.TryGetValue("Type", out var typeObj) && typeObj != null && string.Equals(typeObj.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
+                {
+                    isWaitUntil = true;
+                }
+
                 foreach (var kvp in dict)
                 {
                     if (string.Equals(kvp.Key, "Condition", StringComparison.OrdinalIgnoreCase)
@@ -77,11 +83,11 @@ namespace ZL.Gear.Engine.Planning
                         var text = kvp.Value.ToString();
                         if (!string.IsNullOrWhiteSpace(text))
                         {
-                            yield return (stepKey, text);
+                            yield return (stepKey, text, isWaitUntil);
                         }
                     }
 
-                    foreach (var pair in CollectFromObject(kvp.Value, stepKey))
+                    foreach (var pair in CollectFromObject(kvp.Value, stepKey, isWaitUntil))
                     {
                         yield return pair;
                     }
@@ -94,7 +100,7 @@ namespace ZL.Gear.Engine.Planning
             {
                 foreach (var item in list)
                 {
-                    foreach (var pair in CollectFromObject(item, stepKey))
+                    foreach (var pair in CollectFromObject(item, stepKey, isWaitUntil))
                     {
                         yield return pair;
                     }
@@ -102,8 +108,15 @@ namespace ZL.Gear.Engine.Planning
             }
         }
 
-        private static IEnumerable<(string StepKey, string Expression)> CollectFromJObject(JObject jobj, string stepKey)
+        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromJObject(JObject jobj, string stepKey, bool isWaitUntil = false)
         {
+            // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
+            var typeToken = jobj["Type"];
+            if (typeToken != null && string.Equals(typeToken.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
+            {
+                isWaitUntil = true;
+            }
+
             foreach (var prop in jobj.Properties())
             {
                 if (string.Equals(prop.Name, "Condition", StringComparison.OrdinalIgnoreCase)
@@ -112,11 +125,11 @@ namespace ZL.Gear.Engine.Planning
                     var text = prop.Value.ToString();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        yield return (stepKey, text);
+                        yield return (stepKey, text, isWaitUntil);
                     }
                 }
 
-                foreach (var pair in CollectFromObject(prop.Value, stepKey))
+                foreach (var pair in CollectFromObject(prop.Value, stepKey, isWaitUntil))
                 {
                     yield return pair;
                 }
