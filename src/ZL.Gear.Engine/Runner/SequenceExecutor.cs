@@ -130,6 +130,20 @@ namespace ZL.Gear.Engine.Runner
         }
 
         /// <summary>
+        /// 本 Runtime 已注册的步骤命令快照（扩展装载自检 / 运维诊断）。
+        /// </summary>
+        public IReadOnlyCollection<string> GetRegisteredStepCommands()
+        {
+            var registry = ResolveServices().GetService(typeof(IStepHandlerRegistry)) as IStepHandlerRegistry;
+            if (registry == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            return registry.GetRegisteredCommands()?.ToList() ?? new List<string>();
+        }
+
+        /// <summary>
         /// 后台计时器循环（当前为保留实现，暂未对外广播总耗时事件）。
         /// </summary>
         /// <param name="token">取消令牌。</param>
@@ -425,13 +439,9 @@ namespace ZL.Gear.Engine.Runner
             var sw = Stopwatch.StartNew();
             stepResult.StartTime = DateTime.Now;
             stepResult.Status = StepExecutionStatus.Running;
-            // LegacyBridge.RunnerEvents.StepStarted?.Invoke(context); // 逐步废弃
             _eventBus.Publish(new StepProgressEvent(stepResult));
             _log($"[执行] {stepConfig.StepName}...");
             _log($"[诊断] 步骤 {stepConfig.StepKey} 有 {stepConfig.SubSteps?.Count ?? 0} 个子步骤");
-            // --- UI 更新点 (阶段四) ---
-            // progress?.Report(stepResult);
-            // LegacyBridge.TestEvents.StepStarted?.Invoke(stepConfig.StepName); // 旧事件可保留或替换
 
             try
             {

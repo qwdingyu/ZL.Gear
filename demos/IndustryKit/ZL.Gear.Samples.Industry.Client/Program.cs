@@ -8,8 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using ZL.Gear.Core.Infrastructure;
 using ZL.Gear.Core.Runner;
 using ZL.Gear.Core.StepHandler;
-using ZL.Gear.Core.Workflow;
 using ZL.Gear.Engine;
+using ZL.Gear.Engine.Runner;
 using ZL.Gear.Extension.Station;
 namespace ZL.Gear.Samples.Industry.Client
 {
@@ -440,7 +440,7 @@ namespace ZL.Gear.Samples.Industry.Client
                 .Build();
 
             // 启动期一次性自检：扩展命令必须双面注册，否则 verify 全绿也可能是假绿
-            EnsureStationExtensionRegistered();
+            EnsureStationExtensionRegistered(executor);
 
             var scenarioName = Path.GetFileNameWithoutExtension(scenarioPath);
             var model = "IndustryKit";
@@ -469,24 +469,27 @@ namespace ZL.Gear.Samples.Industry.Client
         /// <summary>
         /// 确认 Station 扩展三条命令已进注册表（Handler 侧；Action 侧由 RegisterHandlerWithAction 同步保证）。
         /// </summary>
-        private static void EnsureStationExtensionRegistered()
+        private static void EnsureStationExtensionRegistered(SequenceExecutor executor)
         {
             if (_extensionRegistrationChecked)
             {
                 return;
             }
 
-            var registry = WorkflowGlobal.Services.GetService<IStepHandlerRegistry>();
-
-            if (registry == null)
+            if (executor == null)
             {
-                throw new InvalidOperationException(
-                    "无法从 WorkflowGlobal 获取 IStepHandlerRegistry，扩展可能未装载。");
+                throw new ArgumentNullException(nameof(executor));
             }
 
             var registered = new HashSet<string>(
-                registry.GetRegisteredCommands(),
+                executor.GetRegisteredStepCommands(),
                 StringComparer.OrdinalIgnoreCase);
+
+            if (registered.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "无法从本 Runtime 获取已注册命令，扩展可能未装载。");
+            }
 
             foreach (var cmd in new[]
                      {

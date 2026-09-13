@@ -36,12 +36,32 @@ namespace ZL.Gear.Core.Configuration
                     InfrastructurePath = Path.Combine(dir, "infrastructure.json"),
                     BarcodeRulesPath = Path.Combine(dir, "barcode_rules.json"),
                     ModelListPath = Path.Combine(dir, "ModelList.json"),
-                    DeviceProfilePath = Path.Combine(dir, "DeviceProfile.json"),
+                    DeviceProfilePath = ResolveDeviceProfilePath(dir),
                 };
 
                 configs[libraryName] = config;
             }
             return configs;
+        }
+
+        /// <summary>
+        /// 盐城 legacy 使用 SeatProfile.json；新库使用 DeviceProfile.json。
+        /// </summary>
+        private static string ResolveDeviceProfilePath(string libraryDir)
+        {
+            var deviceProfile = Path.Combine(libraryDir, "DeviceProfile.json");
+            if (File.Exists(deviceProfile))
+            {
+                return deviceProfile;
+            }
+
+            var seatProfile = Path.Combine(libraryDir, "SeatProfile.json");
+            if (File.Exists(seatProfile))
+            {
+                return seatProfile;
+            }
+
+            return deviceProfile;
         }
     }
 }

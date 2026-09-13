@@ -538,7 +538,7 @@ namespace ZL.Gear.Engine
             // 自定义服务配置（如果指定）
             _customServicesConfig?.Invoke(services);
 
-            // 每个 Build 产出独立 ServiceProvider，不再写入进程级 WorkflowGlobal（对标多 Runtime 隔离）。
+            // 每个 Build 产出独立 ServiceProvider 与 EventBus（对标 OpenTAP PlanRun 隔离）。
             return services.BuildServiceProvider();
         }
 
