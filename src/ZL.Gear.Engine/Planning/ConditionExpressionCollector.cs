@@ -8,8 +8,9 @@ namespace ZL.Gear.Engine.Planning
 {
     /// <summary>
     /// 从 Plan 步骤树收集全部布尔条件表达式（Parameters.Condition + DynamicFlow WorkflowDefinition 内嵌 Condition）。
+    /// WaitUntil 节点的 Condition 会被标记为执行期轮询条件，由调用方决定是否跳过编译期检查。
     /// </summary>
-    public static class ConditionExpressionCollector
+    internal static class ConditionExpressionCollector
     {
         public static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromSteps(IEnumerable<StepConfig> roots)
         {
@@ -32,7 +33,7 @@ namespace ZL.Gear.Engine.Planning
             }
         }
 
-        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromObject(object obj, string stepKey, bool isWaitUntil = false)
+        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromObject(object obj, string stepKey)
         {
             if (obj == null)
             {
@@ -46,7 +47,7 @@ namespace ZL.Gear.Engine.Planning
 
             if (obj is JObject jobj)
             {
-                foreach (var pair in CollectFromJObject(jobj, stepKey, isWaitUntil))
+                foreach (var pair in CollectFromJObject(jobj, stepKey))
                 {
                     yield return pair;
                 }
@@ -58,7 +59,7 @@ namespace ZL.Gear.Engine.Planning
             {
                 foreach (var item in jarr)
                 {
-                    foreach (var pair in CollectFromObject(item, stepKey, isWaitUntil))
+                    foreach (var pair in CollectFromObject(item, stepKey))
                     {
                         yield return pair;
                     }
@@ -69,11 +70,11 @@ namespace ZL.Gear.Engine.Planning
 
             if (obj is IDictionary<string, object> dict)
             {
-                // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
-                var currentIsWaitUntil = false;
+                // 仅本节点判定：Type == WaitUntil ⇒ 本节点 Condition 为执行期条件
+                var isWaitUntilNode = false;
                 if (dict.TryGetValue("Type", out var typeObj) && typeObj != null && string.Equals(typeObj.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
                 {
-                    currentIsWaitUntil = true;
+                    isWaitUntilNode = true;
                 }
 
                 foreach (var kvp in dict)
@@ -84,12 +85,12 @@ namespace ZL.Gear.Engine.Planning
                         var text = kvp.Value.ToString();
                         if (!string.IsNullOrWhiteSpace(text))
                         {
-                            yield return (stepKey, text, currentIsWaitUntil);
+                            yield return (stepKey, text, isWaitUntilNode);
                         }
                     }
 
-                    // 子节点独立判断类型，不继承父级 WaitUntil 标记
-                    foreach (var pair in CollectFromObject(kvp.Value, stepKey, false))
+                    // 子节点自行判定类型，不继承父级 WaitUntil 标记
+                    foreach (var pair in CollectFromObject(kvp.Value, stepKey))
                     {
                         yield return pair;
                     }
@@ -102,7 +103,7 @@ namespace ZL.Gear.Engine.Planning
             {
                 foreach (var item in list)
                 {
-                    foreach (var pair in CollectFromObject(item, stepKey, isWaitUntil))
+                    foreach (var pair in CollectFromObject(item, stepKey))
                     {
                         yield return pair;
                     }
@@ -110,14 +111,14 @@ namespace ZL.Gear.Engine.Planning
             }
         }
 
-        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromJObject(JObject jobj, string stepKey, bool isWaitUntil = false)
+        private static IEnumerable<(string StepKey, string Expression, bool IsWaitUntilCondition)> CollectFromJObject(JObject jobj, string stepKey)
         {
-            // WorkflowNode 类型字段为 WaitUntil 时，其 Condition 属于执行期轮询条件，需单独标记
-            var currentIsWaitUntil = false;
+            // 仅本节点判定：Type == WaitUntil ⇒ 本节点 Condition 为执行期条件
+            var isWaitUntilNode = false;
             var typeToken = jobj["Type"];
             if (typeToken != null && string.Equals(typeToken.ToString(), "WaitUntil", StringComparison.OrdinalIgnoreCase))
             {
-                currentIsWaitUntil = true;
+                isWaitUntilNode = true;
             }
 
             foreach (var prop in jobj.Properties())
@@ -128,12 +129,12 @@ namespace ZL.Gear.Engine.Planning
                     var text = prop.Value.ToString();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        yield return (stepKey, text, currentIsWaitUntil);
+                        yield return (stepKey, text, isWaitUntilNode);
                     }
                 }
 
-                // 子节点独立判断类型，不继承父级 WaitUntil 标记
-                foreach (var pair in CollectFromObject(prop.Value, stepKey, false))
+                // 子节点自行判定类型，不继承父级 WaitUntil 标记
+                foreach (var pair in CollectFromObject(prop.Value, stepKey))
                 {
                     yield return pair;
                 }

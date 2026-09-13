@@ -212,9 +212,21 @@ namespace ZL.Gear.Engine.Planning
 
                 foreach (var (stepKey, condition, isWaitUntilCondition) in ConditionExpressionCollector.CollectFromSteps(new[] { step }))
                 {
-                    // WaitUntil.Condition 属于执行期轮询条件，运行期才注入变量，跳过构建期语法检查
+                    // WaitUntil.Condition 运行期才注入变量，空变量表只做结构校验；
+                    // 忽略未定义变量误报，只捕获真正的语法/类型错误。
                     if (isWaitUntilCondition)
                     {
+                        if (!evaluator.TryValidateConditionSyntax(condition, new Dictionary<string, object>(), out var wuError))
+                        {
+                            if (wuError.IndexOf("Unknown identifier", StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                diagnostics.Add(PlanCompileDiagnostic.Error(
+                                    "INVALID_CONDITION",
+                                    $"WaitUntil 条件语法错误: {wuError}（表达式: {condition}）",
+                                    stepKey));
+                            }
+                        }
+
                         continue;
                     }
 
@@ -243,7 +255,7 @@ namespace ZL.Gear.Engine.Planning
                 {
                     if (!target.ContainsKey(kvp.Key))
                     {
-                        target[kvp.Key] = kvp.Value;
+                        target[kvp.Key] = SafeVariableValue(kvp.Value);
                     }
                 }
             }
@@ -253,10 +265,32 @@ namespace ZL.Gear.Engine.Planning
                 {
                     if (!target.ContainsKey(prop.Name))
                     {
-                        target[prop.Name] = prop.Value.Type == JTokenType.Object ? prop.Value.ToString() : prop.Value.ToObject<object>();
+                        target[prop.Name] = SafeVariableValue(prop.Value);
                     }
                 }
             }
+        }
+
+        private static object SafeVariableValue(object value)
+        {
+            // DynamicExpresso 无法提升复杂容器为单一类型，传 null 只声明标识符存在
+            if (value is IDictionary<string, object> || value is System.Collections.IEnumerable && !(value is string))
+            {
+                return null;
+            }
+
+            return value;
+        }
+
+        private static object SafeVariableValue(JToken token)
+        {
+            // 基本类型保留字面量，复杂 JSON 结构传 null
+            if (token.Type == JTokenType.Object || token.Type == JTokenType.Array)
+            {
+                return null;
+            }
+
+            return token.ToObject<object>();
         }
 
         private static void ApplyProfileRecursive(StepConfig step, IDictionary<string, string> profile)

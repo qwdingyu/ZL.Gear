@@ -7,6 +7,7 @@
     <RootNamespace>ZL.Gear.Engine</RootNamespace>
     <Description>Gear.NET orchestration engine: workflow execution, scheduling, and industry kit integration.</Description>
     <NoWarn>$(NoWarn);CS8632;CS0067;CS0108;CS0168;CS0162;CA2200</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>

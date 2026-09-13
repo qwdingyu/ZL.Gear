@@ -373,9 +373,45 @@ namespace ZL.Gear.Engine.Tests
             context.WorkflowEvaluator = new WorkflowEvaluator();
             var result = new DefaultPlanCompiler().Compile(steps, context);
 
-            // WaitUntil 条件被跳过，不应报 INVALID_CONDITION（即使 Sensor 未定义）
+            // WaitUntil 条件运行期才注入变量，空变量表校验会误报 Unknown identifier；
+            // 此处应静默忽略未定义变量，只捕获真正的语法/类型错误。
             Assert.That(result.Success, Is.True);
             Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.False);
+        }
+
+        [Test]
+        public void Compile_WaitUntilCondition_语法错误仍failClosed()
+        {
+            var steps = new List<StepConfig>
+            {
+                new StepConfig
+                {
+                    StepKey = "S1",
+                    Command = "DynamicFlow",
+                    Enable = true,
+                    Parameters = new Dictionary<string, object>
+                    {
+                        ["WorkflowDefinition"] = new Dictionary<string, object>
+                        {
+                            ["Sequence"] = new List<object>
+                            {
+                                new Dictionary<string, object>
+                                {
+                                    ["Type"] = "WaitUntil",
+                                    ["Condition"] = "1 + + 2"  // 真正的语法错误
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var context = LenientContext(new StubRegistry(new Dictionary<string, bool> { ["DynamicFlow"] = false }));
+            context.WorkflowEvaluator = new WorkflowEvaluator();
+            var result = new DefaultPlanCompiler().Compile(steps, context);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Diagnostics.Any(d => d.Code == "INVALID_CONDITION"), Is.True);
         }
 
         [Test]
